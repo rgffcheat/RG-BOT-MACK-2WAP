@@ -156,3 +156,21 @@ Files changed: bot.py, web.py (main.py, db.py unchanged). Replace ALL files and 
    Tick the ones that belong to e.g. NON ROOT PANEL (or Select all) -> press Save. Unticked products leave that category.
 6) PANEL API -> Show Products: new box "Put new products into category" - added products go straight into that category
    (only products that have no category yet are changed).
+
+================ V15 - ADMIN ROLES + WEBSITE AUTO LOGIN + DEVICE SECURITY ================
+Files changed: bot.py, web.py, main.py.  NEW file: secure.py.  Replace ALL files and redeploy. Old data is kept.
+REQUIRED: env variable PUBLIC_URL (or RENDER_EXTERNAL_URL) must be an https:// address - the website button needs it.
+1) MENUS: normal users / resellers see only /start.  Owner + admins see /start, /admin, /website.
+   (Telegram's per-chat command menu is set by the bot itself, so it overrides the list from BotFather.)
+2) /website (or /admin -> "Open Admin Website"): a button opens the website INSIDE Telegram and signs in by itself - no username/password.
+   Telegram's signed data proves who tapped, so it only works for the owner and admins.
+3) ADD / REMOVE ADMINS (owner only): /admin -> Manage Admins -> Add Admin (send the Telegram ID or forward his message) / Remove.
+   Also /addadmin 123456789 and /removeadmin 123456789.  A removed admin loses the commands and any open website session at once.
+4) DEVICE SECURITY for the username/password login:
+   - Very first login ever = trusted automatically (you get a "First admin login" message).
+   - Any NEW device with the correct password -> the owner gets "ADMIN LOGIN - NEW DEVICE" in Telegram (device, IP, time)
+     with [Yes, it's me] / [No - Ban].  The login page waits for the answer (3 minutes, then it is refused).
+       Yes -> that device is trusted and enters.   No -> device + IP are banned and a red "ACCESS BLOCKED" page is shown.
+   - /admin -> Security: see trusted devices and bans, "Remove trusted devices", "Unban all".
+   - Telegram auto-login (point 2) is never blocked by a ban made against somebody else.
+5) CHANGE THE DEFAULT PASSWORD: set env ADMIN_USER and ADMIN_PASS on Render (the code default is public in the files).

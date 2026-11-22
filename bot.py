@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import requests
-import db, gateway, panel
+import db, gateway, panel, secure
 
 try:
     import segno
@@ -1510,6 +1510,88 @@ def broadcast(text, only_ids=None, done=None):
     threading.Thread(target=job, daemon=True).start()
 
 
+# ------------------------------------------------------------------ V15: admin access screens
+def web_url():
+    return (PUBLIC_URL + "/tg-login") if PUBLIC_URL.startswith("https://") else ""
+
+
+def website_msg():
+    url = web_url()
+    if not url:
+        return ("⚠️ The website address is not set. Add the env variable <b>PUBLIC_URL</b> (https://...) and redeploy.", None)
+    return ("🌐 <b>Admin Website</b>\nTap the button — you enter directly, no login needed.",
+            {"inline_keyboard": [[{"text": "🌐 Open Admin Website", "web_app": {"url": url}}]]})
+
+
+def admin_home(uid):
+    t, k = website_msg()
+    rows = (k or {"inline_keyboard": []})["inline_keyboard"]
+    if secure.is_owner(uid):
+        rows.append([{"text": "👥 Manage Admins", "callback_data": "ad:list"},
+                     {"text": "🔐 Security", "callback_data": "ad:sec"}])
+    text = "🔨 <b>ADMIN PANEL</b>\n━━━━━━━━━━━━━━\n" + ("Owner access" if secure.is_owner(uid) else "Admin access") + \
+           ("\n\n" + t if not k else "")
+    return text, {"inline_keyboard": rows}
+
+
+def _name(i):
+    u = db.user(i)
+    return (esc(u["name"]) if u and u["name"] else "—") + (f" @{esc(u['username'])}" if u and u["username"] else "")
+
+
+def admins_screen():
+    ids = secure.admin_ids()
+    lines = [f"👑 Owner: <code>{secure.owner_id()}</code>"]
+    rows = []
+    for i in ids:
+        lines.append(f"🛡 Admin: <code>{i}</code> · {_name(i)}")
+        rows.append([B(f"Remove {i}", cb=f"ad:rm:{i}", style="danger")])
+    if not ids:
+        lines.append("\nNo extra admins yet.")
+    rows.append([B("➕ Add Admin", cb="ad:add", style="success")])
+    rows.append([B("Back", cb="ad:home")])
+    return "👥 <b>ADMINS</b>\n━━━━━━━━━━━━━━\n" + "\n".join(lines), KB(*rows)
+
+
+def security_screen(note=""):
+    tr, bn = secure.trusted(), secure.bans()
+    lines = [f"🔐 <b>SECURITY</b>\n━━━━━━━━━━━━━━", f"✅ Trusted devices: <b>{len(tr)}</b>"]
+    for d in tr[-5:]:
+        lines.append(f"   • {esc(secure.short_ua(d.get('ua', '')))} · <code>{esc(d.get('ip', ''))}</code>")
+    lines.append(f"🚫 Banned devices: <b>{len(bn['dev'])}</b> · banned IPs: <b>{len(bn['ip'])}</b>")
+    lines.append("\nNew device + correct password = you get an alert here (Yes = allow, No = ban).")
+    if note:
+        lines.append("\n" + note)
+    return "\n".join(lines), KB([B("🧹 Remove trusted devices", cb="ad:rev")], [B("✅ Unban all", cb="ad:unban")], [B("Back", cb="ad:home")])
+
+
+def do_add_admin(chat, raw_id):
+    raw_id = (raw_id or "").strip()
+    if not raw_id.isdigit():
+        send(chat, "❌ Send the Telegram ID as numbers only (or forward a message from him).")
+        return
+    ok, msg = secure.add_admin(int(raw_id))
+    if not ok:
+        send(chat, "⚠️ " + esc(msg))
+        return
+    r = send(int(raw_id), "✅ <b>You are now an admin.</b>\nPress /start — then use /admin or /website.")
+    safe(secure.sync_commands, int(raw_id))
+    send(chat, f"✅ Admin added: <code>{raw_id}</code>" + ("" if r.get("ok") else
+         "\n⚠️ Telegram could not message him — he must press /start in this bot once, then press /start again."), admins_screen()[1])
+
+
+def do_remove_admin(chat, raw_id, quiet=False):
+    raw_id = (raw_id or "").strip()
+    if not raw_id.isdigit() or not secure.remove_admin(int(raw_id)):
+        if not quiet:
+            send(chat, "⚠️ That ID is not an admin.")
+        return
+    safe(secure.sync_commands, int(raw_id))
+    safe(send, int(raw_id), "⛔ Your admin access was removed.")
+    if not quiet:
+        send(chat, f"✅ Admin removed: <code>{raw_id}</code>")
+
+
 # ------------------------------------------------------------------ handlers
 def ask_phone(chat):
     kb = {"keyboard": [[{"text": "📱 Share Phone Number", "request_contact": True}]],
@@ -1526,7 +1608,7 @@ def on_message(m):
 
     # admin helper: send a premium emoji -> get its ID
     ents = [e for e in (m.get("entities") or []) if e["type"] == "custom_emoji"]
-    if uid == ADMIN_ID and ents:
+    if secure.is_admin(uid) and ents:
         t16 = text.encode("utf-16-le")
         lines = []
         for e in ents:
@@ -1536,7 +1618,7 @@ def on_message(m):
              "\n\nPaste the ID in the website admin panel → Premium Emoji.")
         return
 
-    if uid == ADMIN_ID and text.startswith("/find"):
+    if secure.is_admin(uid) and text.startswith("/find"):
         q = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
         if not q:
             send(chat, "Send: <code>/find ORD2026...</code> (order ID, WAL… order, or transaction ID)")
@@ -1549,16 +1631,42 @@ def on_message(m):
             send(chat, find_text(h))
         return
 
-    if uid == ADMIN_ID and text.startswith("/emojitest"):
+    if secure.is_admin(uid) and text.startswith("/emojitest"):
         ok, rep = emoji_test()
         send(chat, ("✅ " if ok else "⚠️ ") + esc(rep))
         return
 
-    if db.get("maint") == "1" and uid != ADMIN_ID:
+    # ---- V15: admin commands (only owner / admins ever see or can use them)
+    if secure.is_admin(uid):
+        cmd = text.split("@")[0].split()[0].lower() if text.startswith("/") else ""
+        if cmd == "/admin":
+            send(chat, *admin_home(uid))
+            return
+        if cmd == "/website":
+            send(chat, *website_msg())
+            return
+        if secure.is_owner(uid):
+            parts = text.split()
+            if cmd == "/addadmin" and len(parts) > 1:
+                do_add_admin(chat, parts[1])
+                return
+            if cmd == "/removeadmin" and len(parts) > 1:
+                do_remove_admin(chat, parts[1])
+                return
+            if uid in secure.ADD_WAIT and not text.startswith("/"):
+                fid = ((m.get("forward_origin") or {}).get("sender_user") or {}).get("id") or (m.get("forward_from") or {}).get("id")
+                cand = str(fid) if fid else text.strip()
+                secure.ADD_WAIT.pop(uid, None)
+                do_add_admin(chat, cand)
+                return
+
+    if db.get("maint") == "1" and not secure.is_admin(uid):
         send(chat, "🛠 " + esc(db.get("maint_text")))
         return
 
     if text.startswith("/start"):
+        if secure.is_admin(uid):
+            threading.Thread(target=safe, args=(secure.sync_commands, uid), daemon=True).start()
         parts = text.split(maxsplit=1)
         ref = None
         if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -1682,9 +1790,58 @@ def on_cb(cq):
     data = cq["data"]
     photo = "photo" in cq["message"]
 
+    # ---- V15: new-device login approval (owner only)
+    if data.startswith("wl:"):
+        if not secure.is_owner(uid):
+            ans(cq, "Not allowed.", True)
+            return
+        try:
+            _, yn, rid = data.split(":", 2)
+        except ValueError:
+            return
+        res = secure.decide(rid, yn == "y")
+        msg = {"ok": "✅ <b>Login allowed.</b> This device is trusted now.",
+               "no": "🚫 <b>Login denied.</b> The device and its IP are banned. The red alert is shown to them.",
+               "old": "⌛ This request is already handled or expired."}[res]
+        api("editMessageText", chat_id=chat, message_id=mid, text=msg, parse_mode="HTML",
+            reply_markup=json.dumps({"inline_keyboard": []}))
+        ans(cq)
+        return
+    # ---- V15: admin panel screens
+    if data.startswith("ad:"):
+        if not secure.is_owner(uid):
+            ans(cq, "Only the owner can do this.", True)
+            return
+        ans(cq)
+        act = data[3:]
+        if act == "home":
+            t, k = admin_home(uid)
+        elif act == "list":
+            t, k = admins_screen()
+        elif act == "add":
+            secure.ADD_WAIT[uid] = time.time()
+            t, k = ("➕ <b>Add admin</b>\n\nSend the new admin's <b>Telegram ID</b> (numbers), or <b>forward</b> any message from him here.\n"
+                    "He must have pressed /start in this bot once.", KB([B("Cancel", cb="ad:list")]))
+        elif act.startswith("rm:"):
+            do_remove_admin(chat, act[3:], quiet=True)
+            t, k = admins_screen()
+        elif act == "sec":
+            t, k = security_screen()
+        elif act == "rev":
+            secure.revoke_all()
+            t, k = security_screen("🧹 All trusted devices removed. The next login will ask for approval... (the very first login is trusted again).")
+        elif act == "unban":
+            secure.unban_all()
+            t, k = security_screen("✅ All bans cleared.")
+        else:
+            return
+        api("editMessageText", chat_id=chat, message_id=mid, text=t, parse_mode="HTML", reply_markup=k,
+            link_preview_options=json.dumps({"is_disabled": True}))
+        return
+
     # admin deposit buttons (work even if admin has not verified a phone)
     if data[:3] in ("ma:", "mr:"):
-        if uid != ADMIN_ID:
+        if not secure.is_admin(uid):
             ans(cq, "Not allowed.", True)
             return
         no, ok = data[3:], data.startswith("ma:")
@@ -1699,7 +1856,7 @@ def on_cb(cq):
             send(chat, f"{'✅ Approved' if ok else '❌ Rejected'} payment <code>{no}</code>.")
         return
     if data[:3] in ("ra:", "rr:"):
-        if uid != ADMIN_ID:
+        if not secure.is_admin(uid):
             ans(cq, "Not allowed.", True)
             return
         ok = data.startswith("ra:")
@@ -1713,7 +1870,7 @@ def on_cb(cq):
             safe(refund_user_msg, r["user_id"], ok, hold, r["plan_id"])
         return
     if data[:3] in ("da:", "dr:"):
-        if uid != ADMIN_ID:
+        if not secure.is_admin(uid):
             ans(cq, "Not allowed.", True)
             return
         did = int(data[3:])
@@ -1729,7 +1886,7 @@ def on_cb(cq):
     if not u or not u["verified"] or u["banned"]:
         ans(cq, "Please /start the bot first.", True)
         return
-    if db.get("maint") == "1" and uid != ADMIN_ID:
+    if db.get("maint") == "1" and not secure.is_admin(uid):
         ans(cq, db.get("maint_text"), True)
         return
     if not rate_ok(uid):

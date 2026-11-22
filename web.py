@@ -1,10 +1,10 @@
 import os, time, secrets, hmac
-from flask import Flask, request, session, redirect, url_for, render_template_string, flash, Response
+from flask import Flask, request, session, redirect, url_for, render_template_string, flash, Response, g, jsonify
 from datetime import datetime, timezone, timedelta
 from jinja2 import DictLoader
 import io, csv, threading
 import json
-import db, bot, backup, gateway, panel
+import db, bot, backup, gateway, panel, secure
 try:
     import segno
 except Exception:
@@ -30,6 +30,9 @@ def secure_headers(r):
     r.headers["X-Content-Type-Options"] = "nosniff"
     r.headers["Referrer-Policy"] = "no-referrer"
     r.headers["Cache-Control"] = "no-store"
+    if getattr(g, "newdev", None):
+        r.set_cookie("rg_dev", g.newdev, max_age=365 * 86400, httponly=True, samesite="Lax",
+                     secure=os.getenv("RENDER_EXTERNAL_URL", "").startswith("https"))
     return r
 
 BASE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0c12">
@@ -385,6 +388,42 @@ BOTCFG = """{% extends 'base.html' %}{% block body %}<h1>Bot Token &amp; Admin</
 <label style="display:block;margin:8px 0"><input type="checkbox" name="tg" value="1" style="width:auto"> Also change the Telegram profile name of the bot</label>
 <button>Save name</button></form></div>{% endblock %}"""
 
+TG_LOGIN = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RG Admin</title><script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>body{margin:0;background:#090b11;color:#e9edf8;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+.c{padding:24px}.s{width:38px;height:38px;border:4px solid #222b41;border-top-color:#6366f1;border-radius:50%;margin:0 auto 14px;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
+a{color:#8b9cff}</style></head><body><div class="c"><div class="s" id="sp"></div><div id="m">Signing in…</div></div>
+<script>
+(function(){var m=document.getElementById('m'),sp=document.getElementById('sp');
+function fail(t){sp.style.display='none';m.innerHTML='🚫 '+t+'<br><br><a href="/login">Login with username &amp; password</a>'}
+try{var w=window.Telegram&&Telegram.WebApp;if(!w||!w.initData){fail('Open this page from the bot (/website).');return}
+w.ready();w.expand&&w.expand();
+fetch('/tg-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:w.initData})})
+.then(function(r){return r.json()}).then(function(j){if(j.ok){location.replace('/')}else{fail(j.err||'Not allowed.')}})
+.catch(function(){fail('Network error. Try again.')})}catch(e){fail('Error. Try again.')}})();
+</script></body></html>"""
+
+LOGIN_WAIT = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waiting for approval</title><style>body{margin:0;background:#090b11;color:#e9edf8;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+.c{max-width:340px;padding:28px;background:#131826;border:1px solid #222b41;border-radius:16px}.s{width:42px;height:42px;border:4px solid #222b41;border-top-color:#fbbf24;border-radius:50%;margin:0 auto 16px;animation:r 1s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}a{color:#8b9cff}small{color:#8a94ae}</style></head><body><div class="c"><div class="s" id="sp"></div>
+<h3 id="t" style="margin:0 0 8px">Waiting for owner approval</h3><div id="m"><small>A device alert was sent to the owner on Telegram. Please wait…</small></div></div>
+<script>
+var r={{ rid|tojson }};
+function tick(){fetch('/login/status?r='+encodeURIComponent(r),{cache:'no-store'}).then(function(x){return x.json()}).then(function(j){
+if(j.st==='ok'){location.replace('/')}
+else if(j.st==='no'){location.replace('/login')}
+else if(j.st==='wait'){setTimeout(tick,2000)}
+else{document.getElementById('sp').style.display='none';document.getElementById('t').textContent='Request expired';
+document.getElementById('m').innerHTML='<a href="/login">Back to login</a>'}}).catch(function(){setTimeout(tick,3000)})}
+tick();
+</script></body></html>"""
+
+BANNED_PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACCESS BLOCKED</title><style>body{margin:0;background:#7f0d0d;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;animation:p 1.2s ease-in-out infinite}
+@keyframes p{0%,100%{background:#7f0d0d}50%{background:#c81e1e}}.c{padding:28px;max-width:380px}h1{font-size:30px;margin:10px 0}.i{font-size:64px}</style></head>
+<body><div class="c"><div class="i">🚨</div><h1>ACCESS BLOCKED</h1><p>This device has been <b>banned</b>.<br>The owner denied this login attempt.</p></div></body></html>"""
+
 app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "assign.html": ASSIGN, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
 
 
@@ -404,15 +443,35 @@ app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), cats=lambda: db.
 app.jinja_env.filters["ts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %H:%M")
 
 
+def dev_id():
+    d = request.cookies.get("rg_dev", "")
+    if len(d) != 32 or not d.isalnum():
+        d = secrets.token_hex(16)
+        g.newdev = d
+    return d
+
+
 @app.before_request
 def guard():
     if request.endpoint in ("health", "static", "pay_page", "pay_status", "gw_webhook"):
         return
+    dev = dev_id()
+    # Telegram-verified admins (tg_login / tg_auth) are never blocked by a ban made against somebody else
+    if request.endpoint in ("tg_login", "tg_auth"):
+        return
+    if not session.get("ok") and secure.is_blocked(dev, client_ip()):      # signed-in admins are never locked out by a shared-IP ban
+        return Response(BANNED_PAGE, 403, mimetype="text/html")
+    if request.endpoint == "login_status":
+        return
     if request.method == "POST" and not hmac.compare_digest(request.form.get("csrf", ""), session.get("csrf", "x")):
         return "Bad request", 400
-    if request.endpoint == "login":
+    if request.endpoint in ("login", "login_wait"):
         return
     if not session.get("ok"):
+        return redirect(url_for("login"))
+    uid = session.get("uid")          # logged in through Telegram: the access ends the moment he is removed as admin
+    if uid and not secure.is_admin(uid):
+        session.clear()
         return redirect(url_for("login"))
 
 
@@ -436,10 +495,22 @@ def login():
         ok = hmac.compare_digest(request.form.get("u", ""), ADMIN_USER) & hmac.compare_digest(request.form.get("p", ""), ADMIN_PASS)
         if ok:
             FAILS.pop(ip, None)
+            dev = dev_id()
+            ua = request.headers.get("User-Agent", "")
+            if secure.device_trusted(dev) or not secure.trusted():
+                first = not secure.trusted()          # very first login ever = trusted at once
+                secure.trust(dev, ip, ua)
+                session.clear()
+                session["ok"] = True
+                session.permanent = True
+                if first:
+                    bot.safe(bot.send, bot.ADMIN_ID, "🔓 <b>First admin login</b> on the website — this device is now trusted.\n"
+                             f"📱 {bot.esc(secure.short_ua(ua))} · 🌐 <code>{bot.esc(ip)}</code>")
+                return redirect("/")
+            rid = secure.new_request(dev, ip, ua)      # new device -> the owner must approve in Telegram
             session.clear()
-            session["ok"] = True
-            session.permanent = True
-            return redirect("/")
+            session["pend"] = rid
+            return redirect("/login/wait")
         f[0] += 1
         if f[0] >= 5:
             f = [0, time.time() + 900]
@@ -447,6 +518,51 @@ def login():
         time.sleep(1.5)
         flash("Wrong username or password")
     return page("login", title="Login")
+
+
+@app.route("/login/wait")
+def login_wait():
+    rid = session.get("pend")
+    if not rid or not secure.get_request(rid):
+        return redirect("/login")
+    return render_template_string(LOGIN_WAIT, rid=rid)
+
+
+@app.route("/login/status")
+def login_status():
+    rid = request.args.get("r", "")
+    if not rid or session.get("pend") != rid:
+        return jsonify(st="none")
+    p = secure.get_request(rid)
+    if not p:
+        return jsonify(st="none")
+    if p["st"] == "ok" and p["dev"] == dev_id():
+        session.pop("pend", None)
+        session["ok"] = True
+        session.permanent = True
+        return jsonify(st="ok")
+    if p["st"] == "no":
+        session.clear()
+        return jsonify(st="no")
+    return jsonify(st=p["st"])
+
+
+@app.route("/tg-login")
+def tg_login():
+    return Response(TG_LOGIN, mimetype="text/html")
+
+
+@app.route("/tg-auth", methods=["POST"])
+def tg_auth():
+    d = (request.get_json(silent=True) or {}).get("d", "")
+    uid = secure.verify_init_data(d)
+    if not uid or not secure.is_admin(uid):
+        return jsonify(ok=False, err="This Telegram account is not an admin.")
+    session.clear()
+    session["ok"] = True
+    session["uid"] = uid
+    session.permanent = True
+    return jsonify(ok=True)
 
 
 @app.route("/logout")

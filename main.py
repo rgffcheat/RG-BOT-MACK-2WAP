@@ -1,6 +1,6 @@
 import os, threading, time
 import requests
-import db, bot, web, backup, panel
+import db, bot, web, backup, panel, secure
 
 # =====================================================================
 #  PREMIUM EMOJI IDs  -  PUT YOUR IDs HERE (once, inside the code)
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     db.migrate_inr()
     db.migrate_v9()
     threading.Thread(target=keepalive, daemon=True).start()
+    threading.Thread(target=secure.startup, daemon=True).start()      # V15: /start only for users, /admin /website for admins
     threading.Thread(target=bot.pay_watch, daemon=True).start()
     threading.Thread(target=panel.sync_loop, daemon=True).start()     # V10: keeps panel prices up to date
     threading.Thread(target=backup.loop, args=(bot.send_doc_admin,), daemon=True).start()
