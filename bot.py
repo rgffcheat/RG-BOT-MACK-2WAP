@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import requests
-import db, gateway, panel, secure
+import db, gateway, panel, secure, bcast
 
 try:
     import segno
@@ -1526,6 +1526,7 @@ def website_msg():
 def admin_home(uid):
     t, k = website_msg()
     rows = (k or {"inline_keyboard": []})["inline_keyboard"]
+    rows.append([{"text": "📣 Broadcast", "callback_data": "bc:home"}])
     if secure.is_owner(uid):
         rows.append([{"text": "👥 Manage Admins", "callback_data": "ad:list"},
                      {"text": "🔐 Security", "callback_data": "ad:sec"}])
@@ -1592,6 +1593,211 @@ def do_remove_admin(chat, raw_id, quiet=False):
         send(chat, f"✅ Admin removed: <code>{raw_id}</code>")
 
 
+# ------------------------------------------------------------------ V16: broadcast (from the bot)
+def bc_kind(m):
+    for k in ("animation", "photo", "video", "audio", "voice", "video_note", "document"):
+        if k in m:
+            return k
+    return "text" if m.get("text") else None
+
+
+def bc_home():
+    n = {k: len(bcast.targets(k)) for k in ("all", "usr", "res")}
+    t = ("📣 <b>BROADCAST</b>\n━━━━━━━━━━━━━━\nSend text, photo, video, audio, voice or file to your customers.\n\n"
+         f"👥 All: <b>{n['all']}</b> · 🛒 Users: <b>{n['usr']}</b> · 💼 Resellers: <b>{n['res']}</b>\n\nWho should get it?")
+    return t, KB([B("👥 All (users + resellers)", cb="bc:t:all")],
+                 [B("🛒 Only users", cb="bc:t:usr"), B("💼 Only resellers", cb="bc:t:res")],
+                 [B("🎯 One person (Telegram ID)", cb="bc:t:one")],
+                 [B("📜 Broadcast history", cb="bc:hist")],
+                 [B("Back", cb="bc:back")])
+
+
+def bc_cancel_kb():
+    return KB([B("Cancel", cb="bc:home", style="danger")])
+
+
+def bc_detail(bid):
+    r = bcast.get(bid)
+    if not r:
+        return "Not found.", KB([B("Back", cb="bc:hist")])
+    state = "🗑 <b>Deleted from users</b>" if r["deleted"] else ("⏳ Sending…" if r["state"] != "done" else "✅ Sent")
+    t = (f"{bcast.ICON.get(r['kind'], '')} <b>BROADCAST #{r['id']}</b>\n━━━━━━━━━━━━━━\n"
+         f"🕐 {ist(r['created'])}\n🎯 {bcast.LABEL.get(r['target'], r['target'])}\n📦 Type: {r['kind']}\n"
+         f"✅ Delivered: <b>{r['ok']}</b> · ❌ Failed: <b>{r['fail']}</b> · Total: {r['total']}\n"
+         f"✏️ Edited: {r['edited']} time(s)\n{state}\n\n📝 {esc(r['preview']) or '—'}")
+    rows = []
+    if not r["deleted"] and r["state"] == "done":
+        row = []
+        if r["kind"] in bcast.EDITABLE:
+            row.append(B("✏️ Edit", cb=f"bc:e:{bid}"))
+        row.append(B("🗑 Delete from all", cb=f"bc:d:{bid}", style="danger"))
+        rows.append(row)
+    rows.append([B("Back", cb="bc:hist")])
+    return t, KB(*rows)
+
+
+def bc_history():
+    rows = []
+    for r in bcast.recent(10):
+        lab = f"#{r['id']} {bcast.ICON.get(r['kind'], '')} {bcast.LABEL.get(r['target'], '')[:14]} · {r['ok']}/{r['total']}" + (" 🗑" if r["deleted"] else "")
+        rows.append([B(lab, cb=f"bc:v:{r['id']}")])
+    rows.append([B("Back", cb="bc:home")])
+    return ("📜 <b>BROADCAST HISTORY</b> (last 10)\nTap one to edit or delete it." if len(rows) > 1 else "📜 No broadcasts yet."), KB(*rows)
+
+
+def _bc_put(chat, mid, t, k):
+    api("editMessageText", chat_id=chat, message_id=mid, text=t, parse_mode="HTML", reply_markup=k,
+        link_preview_options=json.dumps({"is_disabled": True}))
+
+
+def bc_cb(cq, uid, chat, mid, act):
+    ans(cq)
+    st = bcast.WAIT.get(uid) or {}
+    if act in ("home", "back"):
+        bcast.WAIT.pop(uid, None)
+        _bc_put(chat, mid, *(bc_home() if act == "home" else admin_home(uid)))
+    elif act.startswith("t:"):
+        kind = act[2:]
+        if kind == "one":
+            bcast.WAIT[uid] = {"step": "id"}
+            _bc_put(chat, mid, "🎯 <b>One person</b>\n\nSend his <b>Telegram ID</b> (numbers) or forward any message from him.", bc_cancel_kb())
+        else:
+            n = len(bcast.targets(kind))
+            bcast.WAIT[uid] = {"step": "msg", "target": kind}
+            _bc_put(chat, mid, f"📣 <b>{bcast.LABEL[kind]}</b> — {n} people\n\nNow send the message: <b>text, photo, video, audio, voice, GIF or file</b> "
+                               "(caption allowed). It is sent exactly as you write it.", bc_cancel_kb())
+    elif act == "ok":
+        if st.get("step") != "confirm":
+            _bc_put(chat, mid, "⌛ Expired. Start again.", KB([B("Back", cb="bc:home")]))
+            return
+        bcast.WAIT.pop(uid, None)
+        ids = st["ids"]
+        bid = bcast.create(uid, st["target"], st["kind"], st["preview"], len(ids))
+        _bc_put(chat, mid, f"⏳ <b>Broadcast #{bid}</b> started — {len(ids)} people.\nYou get a message here when it is finished.", KB([B("📜 History", cb="bc:hist")]))
+        threading.Thread(target=bc_run, args=(bid, ids, st["src_chat"], st["src_mid"], chat), daemon=True).start()
+    elif act == "hist":
+        _bc_put(chat, mid, *bc_history())
+    elif act.startswith("v:"):
+        _bc_put(chat, mid, *bc_detail(int(act[2:])))
+    elif act.startswith("e:"):
+        bid = int(act[2:])
+        r = bcast.get(bid)
+        if not r or r["deleted"] or r["kind"] not in bcast.EDITABLE:
+            ans(cq, "This broadcast cannot be edited.", True)
+            return
+        bcast.WAIT[uid] = {"step": "edit", "bc": bid}
+        what = "text" if r["kind"] == "text" else "caption"
+        _bc_put(chat, mid, f"✏️ <b>Edit #{bid}</b>\n\nSend the new <b>{what}</b> as a text message. It replaces the old {what} for everyone who got it.",
+                KB([B("Cancel", cb=f"bc:v:{bid}", style="danger")]))
+    elif act.startswith("d:"):
+        bid = int(act[2:])
+        _bc_put(chat, mid, f"🗑 <b>Delete #{bid} from every user's chat?</b>\nThe message disappears for all who received it.",
+                KB([B("Yes, delete", cb=f"bc:dd:{bid}", style="danger")], [B("No", cb=f"bc:v:{bid}")]))
+    elif act.startswith("dd:"):
+        bid = int(act[3:])
+        _bc_put(chat, mid, f"⏳ Deleting broadcast #{bid}…", KB([B("📜 History", cb="bc:hist")]))
+        threading.Thread(target=bc_delete, args=(bid, chat), daemon=True).start()
+
+
+def bc_input(chat, uid, m):
+    st = bcast.WAIT.get(uid) or {}
+    step = st.get("step")
+    if step == "id":
+        fid = ((m.get("forward_origin") or {}).get("sender_user") or {}).get("id") or (m.get("forward_from") or {}).get("id")
+        s = str(fid) if fid else (m.get("text") or "").strip()
+        if not s.isdigit():
+            send(chat, "❌ Send the Telegram ID as numbers only, or forward a message from him.", bc_cancel_kb())
+            return
+        bcast.WAIT[uid] = {"step": "msg", "target": "one", "one": int(s)}
+        send(chat, f"🎯 Person <code>{s}</code>.\nNow send the message (text, photo, video, audio, voice, GIF or file).", bc_cancel_kb())
+    elif step == "msg":
+        kind = bc_kind(m)
+        if not kind:
+            send(chat, "❌ This type is not supported. Send text, photo, video, audio, voice, GIF or a file.", bc_cancel_kb())
+            return
+        tgt = st["target"]
+        ids = [st["one"]] if tgt == "one" else bcast.targets(tgt)
+        if not ids:
+            send(chat, "⚠️ Nobody is in this group yet.", KB([B("Back", cb="bc:home")]))
+            bcast.WAIT.pop(uid, None)
+            return
+        st.update(step="confirm", ids=ids, kind=kind, src_chat=chat, src_mid=m["message_id"],
+                  preview=(m.get("text") or m.get("caption") or "")[:200])
+        send(chat, f"📣 <b>Ready to send</b>\n{bcast.ICON.get(kind, '')} {kind} → <b>{bcast.LABEL[tgt]}</b> ({len(ids)} people)\n\nThe message above is exactly what they get.",
+             KB([B("✅ Send now", cb="bc:ok", style="success")], [B("❌ Cancel", cb="bc:home", style="danger")]))
+    elif step == "edit":
+        txt = m.get("text")
+        if not txt:
+            send(chat, "❌ Send the new text as a normal text message.", bc_cancel_kb())
+            return
+        bcast.WAIT.pop(uid, None)
+        r = bcast.get(st["bc"])
+        if not r or r["deleted"]:
+            send(chat, "⚠️ This broadcast was deleted.")
+            return
+        send(chat, f"⏳ Editing broadcast #{r['id']}…")
+        threading.Thread(target=bc_edit, args=(r["id"], txt, m.get("entities") or [], chat), daemon=True).start()
+
+
+def _retry(method, **p):
+    r = api(method, **p)
+    if r.get("error_code") == 429:
+        time.sleep(min((r.get("parameters") or {}).get("retry_after", 3), 30) + 1)
+        r = api(method, **p)
+    return r
+
+
+def bc_run(bid, ids, src_chat, src_mid, report_chat):
+    ok = fail = 0
+    batch = []
+    for i in ids:
+        r = _retry("copyMessage", chat_id=i, from_chat_id=src_chat, message_id=src_mid)
+        if r.get("ok"):
+            ok += 1
+            batch.append((i, r["result"]["message_id"]))
+        else:
+            fail += 1
+        if len(batch) >= 100:
+            bcast.add_msgs(bid, batch)
+            batch = []
+        time.sleep(0.05)
+    bcast.add_msgs(bid, batch)
+    bcast.finish(bid, ok, fail)
+    send(report_chat, f"✅ <b>Broadcast #{bid} finished</b>\nDelivered: <b>{ok}</b> · Failed: <b>{fail}</b> (blocked the bot / never started it)",
+         KB([B("Open", cb=f"bc:v:{bid}")]))
+
+
+def bc_delete(bid, report_chat):
+    ok = fail = 0
+    for c, mid in bcast.msgs(bid):
+        r = _retry("deleteMessage", chat_id=c, message_id=mid)
+        if r.get("ok") or "not found" in str(r.get("description", "")):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(0.05)
+    bcast.set_deleted(bid)
+    send(report_chat, f"🗑 <b>Broadcast #{bid} deleted</b>\nRemoved: <b>{ok}</b> · Could not remove: <b>{fail}</b>", KB([B("📜 History", cb="bc:hist")]))
+
+
+def bc_edit(bid, text, ents, report_chat):
+    r0 = bcast.get(bid)
+    ok = fail = 0
+    for c, mid in bcast.msgs(bid):
+        if r0["kind"] == "text":
+            r = _retry("editMessageText", chat_id=c, message_id=mid, text=text, entities=json.dumps(ents),
+                       link_preview_options=json.dumps({"is_disabled": True}))
+        else:
+            r = _retry("editMessageCaption", chat_id=c, message_id=mid, caption=text, caption_entities=json.dumps(ents))
+        if r.get("ok") or "not modified" in str(r.get("description", "")):
+            ok += 1
+        else:
+            fail += 1
+        time.sleep(0.05)
+    bcast.set_edited(bid, text)
+    send(report_chat, f"✏️ <b>Broadcast #{bid} edited</b>\nUpdated: <b>{ok}</b> · Failed: <b>{fail}</b>", KB([B("Open", cb=f"bc:v:{bid}")]))
+
+
 # ------------------------------------------------------------------ handlers
 def ask_phone(chat):
     kb = {"keyboard": [[{"text": "📱 Share Phone Number", "request_contact": True}]],
@@ -1608,7 +1814,7 @@ def on_message(m):
 
     # admin helper: send a premium emoji -> get its ID
     ents = [e for e in (m.get("entities") or []) if e["type"] == "custom_emoji"]
-    if secure.is_admin(uid) and ents:
+    if secure.is_admin(uid) and ents and uid not in bcast.WAIT:
         t16 = text.encode("utf-16-le")
         lines = []
         for e in ents:
@@ -1638,7 +1844,16 @@ def on_message(m):
 
     # ---- V15: admin commands (only owner / admins ever see or can use them)
     if secure.is_admin(uid):
+        if uid in bcast.WAIT:
+            if text.startswith("/"):
+                bcast.WAIT.pop(uid, None)             # a command cancels the broadcast step
+            else:
+                bc_input(chat, uid, m)
+                return
         cmd = text.split("@")[0].split()[0].lower() if text.startswith("/") else ""
+        if cmd == "/broadcast":
+            send(chat, *bc_home())
+            return
         if cmd == "/admin":
             send(chat, *admin_home(uid))
             return
@@ -1806,6 +2021,13 @@ def on_cb(cq):
         api("editMessageText", chat_id=chat, message_id=mid, text=msg, parse_mode="HTML",
             reply_markup=json.dumps({"inline_keyboard": []}))
         ans(cq)
+        return
+    # ---- V16: broadcast screens (owner + admins)
+    if data.startswith("bc:"):
+        if not secure.is_admin(uid):
+            ans(cq, "Not allowed.", True)
+            return
+        bc_cb(cq, uid, chat, mid, data[3:])
         return
     # ---- V15: admin panel screens
     if data.startswith("ad:"):

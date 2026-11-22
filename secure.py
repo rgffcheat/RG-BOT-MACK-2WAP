@@ -64,7 +64,8 @@ def remove_admin(uid):
 # ------------------------------------------------------------------ Telegram command menu
 START_CMD = [{"command": "start", "description": "Open main menu ⚡"}]
 ADMIN_CMDS = START_CMD + [{"command": "admin", "description": "Open admin panel 🔨"},
-                          {"command": "website", "description": "Open admin website 🌐"}]
+                          {"command": "website", "description": "Open admin website 🌐"},
+                          {"command": "broadcast", "description": "Send broadcast 📣"}]
 
 
 def sync_commands(only=None):

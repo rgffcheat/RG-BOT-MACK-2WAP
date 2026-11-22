@@ -174,3 +174,15 @@ REQUIRED: env variable PUBLIC_URL (or RENDER_EXTERNAL_URL) must be an https:// a
    - /admin -> Security: see trusted devices and bans, "Remove trusted devices", "Unban all".
    - Telegram auto-login (point 2) is never blocked by a ban made against somebody else.
 5) CHANGE THE DEFAULT PASSWORD: set env ADMIN_USER and ADMIN_PASS on Render (the code default is public in the files).
+
+================ V16 - BROADCAST FROM THE BOT ================
+Files changed: bot.py, secure.py.  NEW file: bcast.py.  Replace ALL files and redeploy. Old data is kept (new tables are created by themselves).
+Owner + admins: /broadcast  (or /admin -> Broadcast).
+1) TARGET: All (users + resellers) | Only users | Only resellers | One person (Telegram ID, or forward his message).
+2) CONTENT: text, photo, video, audio, voice, GIF, file, round video - sent exactly as you wrote it (caption, formatting, premium emoji kept).
+   Flow: pick target -> send the message -> "Ready to send" -> Send now / Cancel.  Runs in the background, you get a report when it is done.
+3) HISTORY (/broadcast -> Broadcast history): last 10, each with time, target, type, delivered / failed.
+   - Edit: replaces the text (text broadcast) or the caption (photo / video / audio / file) for everyone who got it.
+   - Delete from all: removes the message from every user's chat.
+   Voice and round-video messages can be deleted but not edited (Telegram does not allow editing them).
+4) The website Broadcast page still works as before (text only).
