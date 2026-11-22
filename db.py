@@ -232,6 +232,7 @@ def init():
             balance REAL DEFAULT 0, ref_balance REAL DEFAULT 0, ref_by INTEGER,
             joined INTEGER, verified INTEGER DEFAULT 0, role TEXT DEFAULT 'user', banned INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+        CREATE TABLE IF NOT EXISTS user_prices(user_id INTEGER, plan_id INTEGER, price REAL, PRIMARY KEY(user_id, plan_id));
         CREATE TABLE IF NOT EXISTS emojis(k TEXT PRIMARY KEY, fallback TEXT, eid TEXT DEFAULT '', note TEXT DEFAULT '');
         CREATE TABLE IF NOT EXISTS orders(
             id INTEGER PRIMARY KEY AUTOINCREMENT, order_no TEXT, user_id INTEGER,
@@ -539,8 +540,46 @@ def rate(cur):
 
 
 def price_for(u, pl):
-    base = pl["rprice"] if (u["role"] == "reseller" and pl["rprice"] and pl["rprice"] > 0) else pl["price"]
+    base = None
+    try:                                                  # V18: custom price for this user (set on his profile)
+        with conn() as c:
+            r = c.execute("SELECT price FROM user_prices WHERE user_id=? AND plan_id=?", (u["id"], pl["id"])).fetchone()
+        if r and r["price"] and r["price"] > 0:
+            base = r["price"]
+    except Exception:
+        base = None
+    if base is None:
+        base = pl["rprice"] if (u["role"] == "reseller" and pl["rprice"] and pl["rprice"] > 0) else pl["price"]
     return round(base * rate(u["currency"]), 2)
+
+
+def user_prices(uid):
+    """{plan_id: custom base price} of one user"""
+    with conn() as c:
+        return {r["plan_id"]: r["price"] for r in c.execute("SELECT plan_id, price FROM user_prices WHERE user_id=?", (uid,))}
+
+
+def save_user_prices(uid, values):
+    """values = {plan_id: '12.5' | ''}. blank = back to the normal price. Returns (saved, cleared, bad)."""
+    saved = cleared = bad = 0
+    with conn() as c:
+        for plid, v in values.items():
+            v = (v or "").strip()
+            if not v:
+                cleared += c.execute("DELETE FROM user_prices WHERE user_id=? AND plan_id=?", (uid, plid)).rowcount
+                continue
+            try:
+                p = round(float(v), 2)
+            except ValueError:
+                bad += 1
+                continue
+            if p <= 0:
+                bad += 1
+                continue
+            c.execute("INSERT INTO user_prices(user_id, plan_id, price) VALUES(?,?,?) "
+                      "ON CONFLICT(user_id, plan_id) DO UPDATE SET price=excluded.price", (uid, plid, p))
+            saved += 1
+    return saved, cleared, bad
 
 
 def products(active_only=True, cat_id=None):

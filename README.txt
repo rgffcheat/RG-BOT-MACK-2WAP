@@ -215,3 +215,9 @@ Website -> Products: tick products (or "Select all", it also works with the sear
 Website -> Panel API -> Show Products: the list is read fresh from your panel every time you open or press Refresh.
   New products (not in your shop yet) show first with a 🆕 NEW badge. Chips: All / New / Added, plus a search box.
   Tick the ones you want -> "Add selected" (choose a category if you like), or "Add all NEW" to add every new product at once. Prices use your % automatically.
+
+V18 (3) - PRODUCT CUSTOMIZE (special prices per user / reseller)   (files changed: db.py, web.py)
+Website -> Users -> open a user/reseller profile (or search by Chat ID) -> bottom card "Product Customize" -> "Show all products & plans".
+Every product and plan is listed with its normal price. Type a custom price (in Rs) for the plans you want, leave others empty, press "Save all prices" once.
+That user then sees and pays the custom price in the bot (plan list, buy button, wallet, QR/UPI - everywhere). Other users are not affected.
+Empty box = normal price again. "Reset all to normal" removes every custom price of that user. Custom prices are part of the database backup.

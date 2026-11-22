@@ -266,7 +266,20 @@ PROFILE = """{% extends 'base.html' %}{% block body %}{% set u = d.u %}
 <div class="card"><h3>Hacks bought - by product</h3><div class="tw"><table><tr><th>Product</th><th>Times</th><th>Spent</th></tr>{% for r in d.by_product %}<tr><td>{{ r.product }}</td><td>{{ r.n }}</td><td>{{ u.symbol }}{{ '%.2f'|format(r.s) }}</td></tr>{% endfor %}{% if not d.by_product %}<tr><td colspan="3" class="mu">No purchases yet.</td></tr>{% endif %}</table></div></div>
 <div class="card"><h3>Order history ({{ d.hacks }})</h3><div class="tw"><table><tr><th>Date</th><th>Order</th><th>Product</th><th>Plan</th><th>Price</th><th>Key</th></tr>{% for o in d.orders %}<tr><td>{{ o.created|dts }}</td><td><code>{{ o.order_no }}</code></td><td>{{ o.product }}</td><td>{{ o.plan }}</td><td>{{ u.symbol }}{{ '%.2f'|format(o.price) }}</td><td><code>{{ o.key }}</code></td></tr>{% endfor %}{% if not d.orders %}<tr><td colspan="6" class="mu">No orders.</td></tr>{% endif %}</table></div></div>
 <div class="card"><h3>Deposit history</h3><div class="tw"><table><tr><th>Date</th><th>Amount</th><th>Status</th><th>Transaction / UTR</th></tr>{% for x in d.deposits %}<tr><td>{{ x.created|dts }}</td><td>{{ u.symbol }}{{ '%.2f'|format(x.amount) }}</td><td><span class="bd {{ 'ok' if x.status=='paid' else 'no' if x.status in ('rejected','cancelled') else '' }}">{{ x.status }}</span></td><td><code>{{ x.utr or '-' }}</code></td></tr>{% endfor %}{% if not d.deposits %}<tr><td colspan="4" class="mu">No deposits.</td></tr>{% endif %}</table></div></div>
-{% if d.refs %}<div class="card"><h3>People referred ({{ d.nrefs }})</h3><div class="tw"><table><tr><th>ID</th><th>Name</th><th>Joined</th></tr>{% for r in d.refs %}<tr><td><a class="lk" href="/users/{{ r.id }}"><code>{{ r.id }}</code></a></td><td>{{ r.name }}{% if r.username %} <span class="mu">@{{ r.username }}</span>{% endif %}</td><td>{{ r.joined|dts }}</td></tr>{% endfor %}</table></div></div>{% endif %}{% endblock %}"""
+{% if d.refs %}<div class="card"><h3>People referred ({{ d.nrefs }})</h3><div class="tw"><table><tr><th>ID</th><th>Name</th><th>Joined</th></tr>{% for r in d.refs %}<tr><td><a class="lk" href="/users/{{ r.id }}"><code>{{ r.id }}</code></a></td><td>{{ r.name }}{% if r.username %} <span class="mu">@{{ r.username }}</span>{% endif %}</td><td>{{ r.joined|dts }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+<div class="card" id="custom"><h3>🎯 Product Customize</h3>
+<p class="mu">Set a special price for THIS {{ u.role }} only. Leave a box empty = normal price. Prices are in ₹ (base currency); the bot converts to his currency automatically. {% if ncust %}<b>{{ ncust }} custom price(s) active.</b>{% endif %}</p>
+<details {{ 'open' if ncust else '' }}><summary style="cursor:pointer;font-weight:700;margin-bottom:10px">Show all products &amp; plans ({{ prods|length }})</summary>
+<form method="post" action="/users/{{ u.id }}"><input type="hidden" name="csrf" value="{{ csrf() }}">
+{% for p in prods %}<div style="margin:12px 0 4px"><b>{{ p.name }}</b></div>
+<div class="tw"><table><tr><th>Plan</th><th>Normal price</th><th>Custom price</th></tr>
+{% for pl in p.plans %}<tr><td>{{ pl.name }}{% if not pl.active %} <span class="mu">(hidden)</span>{% endif %}</td><td>₹{{ '%g'|format(pl.dflt) }}</td>
+<td><input name="cp_{{ pl.id }}" value="{{ '%g'|format(pl.cust) if pl.cust else '' }}" placeholder="normal" inputmode="decimal" style="width:110px;{{ 'border-color:#22c55e' if pl.cust else '' }}"></td></tr>{% endfor %}</table></div>{% endfor %}
+{% if not prods %}<p class="mu">No products yet.</p>{% endif %}
+<button name="a" value="prices" style="margin-top:14px">💾 Save all prices</button>
+{% if ncust %}<button name="a" value="prices_reset" class="red" onclick="return confirm('Remove ALL custom prices of this user?')">Reset all to normal</button>{% endif %}
+</form></details></div>
+{% endblock %}"""
 
 PRODUCTS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Products</h1><a href="/products/new"><button type="button" style="margin:0">+ Add product</button></a></div>
 <div class="chips"><a class="chip {{ 'on' if cf=='all' }}" href="/products">All <b>{{ n_all }}</b></a>{% for c in cats() %}<a class="chip {{ 'on' if cf==c.id|string }}" href="/products?cat={{ c.id }}">{{ c.name }} <b>{{ c.nprod }}</b></a>{% endfor %}<a class="chip {{ 'on' if cf=='none' }}" href="/products?cat=none">No category <b>{{ n_none }}</b></a></div>
@@ -843,7 +856,16 @@ def user_profile(uid):
     if not d:
         flash("User not found")
         return redirect("/users")
-    return page("profile", d=d, tab="users", title=d["u"]["name"])
+    cust = db.user_prices(uid)
+    prods = []
+    for p in db.products(False):
+        pls = []
+        for pl in db.plans_of(p["id"], False):
+            dflt = pl["rprice"] if (d["u"]["role"] == "reseller" and pl["rprice"] and pl["rprice"] > 0) else pl["price"]
+            pls.append({"id": pl["id"], "name": pl["name"], "dflt": dflt, "cust": cust.get(pl["id"]), "active": pl["active"]})
+        if pls:
+            prods.append({"name": p["name"], "plans": pls})
+    return page("profile", d=d, tab="users", title=d["u"]["name"], prods=prods, ncust=len(cust))
 
 
 @app.route("/users/<int:uid>", methods=["POST"])
@@ -864,6 +886,15 @@ def user_action(uid):
             c.execute("UPDATE users SET role=CASE role WHEN 'reseller' THEN 'user' ELSE 'reseller' END WHERE id=?", (uid,))
         elif a == "ban":
             c.execute("UPDATE users SET banned=1-banned WHERE id=?", (uid,))
+    if a in ("prices", "prices_reset"):                    # V18: Product Customize -> one Save for all prices
+        if a == "prices_reset":
+            with db.conn() as c:
+                c.execute("DELETE FROM user_prices WHERE user_id=?", (uid,))
+            flash("All custom prices removed - this user pays the normal prices again")
+        else:
+            vals = {int(k[3:]): v for k, v in request.form.items() if k.startswith("cp_") and k[3:].isdigit()}
+            s, cl, bad = db.save_user_prices(uid, vals)
+            flash(f"✅ Saved {s} custom price(s)" + (f", {cl} reset to normal" if cl else "") + (f", {bad} invalid ignored (use a number above 0)" if bad else ""))
     if a == "msg":
         txt = request.form.get("text", "").strip()
         r = bot.send(uid, bot.esc(txt)) if txt else {"ok": False}
