@@ -986,3 +986,64 @@ def claim_ref(uid):
 def broadcast_targets():
     with conn() as c:
         return [r["id"] for r in c.execute("SELECT id FROM users WHERE verified=1 AND banned=0")]
+
+
+# ---------- V17: user search / profile ----------
+_UIDX = {"v": False}
+
+
+def search_users(q="", flt="all", sort="new", limit=30, offset=0):
+    """search by Telegram ID (= chat ID), phone, @username or name. Returns (rows, total).
+    each row also has hacks (orders bought) and spent."""
+    import re as _re
+    if not _UIDX["v"]:
+        with conn() as c:
+            c.execute("CREATE INDEX IF NOT EXISTS orders_uid ON orders(user_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS deposits_uid ON deposits(user_id)")
+        _UIDX["v"] = True
+    where, args = [], []
+    q = (q or "").strip()
+    if q:
+        qq = q.lstrip("@")
+        conds, a = ["name LIKE ?", "username LIKE ?"], [f"%{q}%", f"%{qq}%"]
+        digits = _re.sub(r"\D", "", q) if _re.fullmatch(r"[+\d\s\-()]+", q) else ""     # numbers only when the search itself is a number
+        if digits:
+            conds += ["CAST(id AS TEXT) LIKE ?", "REPLACE(REPLACE(COALESCE(phone,''),'+',''),' ','') LIKE ?"]
+            a += [f"%{digits}%", f"%{digits}%"]
+        where.append("(" + " OR ".join(conds) + ")")
+        args += a
+    where.append({"res": "role='reseller'", "usr": "(role IS NULL OR role!='reseller')", "ban": "banned=1",
+                  "unv": "verified=0"}.get(flt, "1=1"))
+    order = {"spent": "spent DESC", "bal": "balance DESC", "orders": "hacks DESC"}.get(sort, "joined DESC")
+    w = " AND ".join(where)
+    with conn() as c:
+        total = c.execute(f"SELECT COUNT(*) FROM users WHERE {w}", args).fetchone()[0]
+        rows = c.execute(f"""SELECT * FROM (SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.user_id=u.id) hacks,
+                             (SELECT COALESCE(SUM(price),0) FROM orders o WHERE o.user_id=u.id) spent FROM users u WHERE {w})
+                             ORDER BY {order} LIMIT ? OFFSET ?""", args + [limit, offset]).fetchall()
+    return rows, total
+
+
+def user_counts():
+    with conn() as c:
+        r = c.execute("""SELECT COUNT(*) a, SUM(role='reseller') r, SUM(banned=1) b, SUM(verified=0) v FROM users""").fetchone()
+    return {"all": r["a"] or 0, "res": r["r"] or 0, "usr": (r["a"] or 0) - (r["r"] or 0), "ban": r["b"] or 0, "unv": r["v"] or 0}
+
+
+def user_profile(uid):
+    """everything about one user (A to Z)"""
+    with conn() as c:
+        u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        if not u:
+            return None
+        o = c.execute("SELECT COUNT(*) n, COALESCE(SUM(price),0) s, MIN(created) f, MAX(created) l FROM orders WHERE user_id=?", (uid,)).fetchone()
+        dep = c.execute("SELECT COALESCE(SUM(amount),0) FROM deposits WHERE user_id=? AND status='paid'", (uid,)).fetchone()[0]
+        return {
+            "u": u, "hacks": o["n"], "spent": o["s"], "first": o["f"], "last": o["l"], "deposited": dep,
+            "by_product": c.execute("SELECT product, COUNT(*) n, SUM(price) s FROM orders WHERE user_id=? GROUP BY product ORDER BY n DESC", (uid,)).fetchall(),
+            "orders": c.execute("SELECT * FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 500", (uid,)).fetchall(),
+            "deposits": c.execute("SELECT * FROM deposits WHERE user_id=? ORDER BY id DESC LIMIT 300", (uid,)).fetchall(),
+            "refs": c.execute("SELECT id,name,username,joined FROM users WHERE ref_by=? ORDER BY joined DESC LIMIT 100", (uid,)).fetchall(),
+            "nrefs": c.execute("SELECT COUNT(*) FROM users WHERE ref_by=?", (uid,)).fetchone()[0],
+            "refby": c.execute("SELECT id,name FROM users WHERE id=?", (u["ref_by"],)).fetchone() if u["ref_by"] else None,
+        }

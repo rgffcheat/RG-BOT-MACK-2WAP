@@ -230,22 +230,53 @@ Or write <code>🔥{6141106778563158041}</code> (emoji + <b>{premium ID}</b>) to
 <label>All Update File link</label><input name="update_url" value="{{ gs('update_url') }}" placeholder="https://t.me/... or drive link"></div>
 <div class="savebar"><button>Save settings</button></div></form>{% endblock %}"""
 
-USERS = """{% extends 'base.html' %}{% block body %}<h1>Users</h1><form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Search ID / name / phone"><button style="margin:0">Search</button></form><br>
-<div class="card tw"><table><tr><th>ID</th><th>Name</th><th>Phone</th><th>Balance</th><th>Account type</th><th>Actions</th></tr>
-{% for u in rows %}<tr><td>{{ u.id }}</td><td>{{ u.name }}</td><td>{{ u.phone or '-' }}</td><td>{{ u.symbol }}{{ '%.2f'|format(u.balance) }}{% set h_ = [[u.refund_hold or 0, u.balance]|min, 0]|max %}{% if h_ > 0 %}<br><span class="wt">Refund hold: {{ '%.2f'|format(h_) }}</span>{% endif %}</td>
-<td>{{ u.role }}{{ ' (banned)' if u.banned }}</td><td><form method="post" action="/users/{{ u.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}">
-<input name="amt" placeholder="+100 / -50" style="width:90px;flex:none"><label style="margin:0;display:flex;align-items:center;gap:4px;white-space:nowrap" title="tick when you add money as a REFUND: the user can spend it only after you approve"><input type="checkbox" name="hold" value="1" style="width:auto"> refund hold</label><button name="a" value="bal" style="margin:0">Balance</button>
-{% if (u.refund_hold or 0) > 0 and u.balance > 0 %}<button name="a" value="rok" style="margin:0" onclick="return confirm('Approve: the refunded money becomes normal wallet money?')">Approve refund</button><button name="a" value="rno" class="red" style="margin:0" onclick="return confirm('Take the refunded money back from the wallet?')">Deduct refund</button>{% endif %}
-<button name="a" value="role" style="margin:0">{{ 'Make user' if u.role=='reseller' else 'Make reseller' }}</button>
-<button name="a" value="ban" class="red" style="margin:0">{{ 'Unban' if u.banned else 'Ban' }}</button></form></td></tr>{% endfor %}</table></div>{% endblock %}"""
+USERS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Users</h1><span class="mu">{{ total }} found</span></div>
+<form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Search Telegram ID / chat ID / phone number / @username / name" autofocus>
+<input type="hidden" name="f" value="{{ f }}"><select name="sort" style="width:auto;flex:none" onchange="this.form.submit()"><option value="new" {{ 'selected' if sort=='new' }}>Newest</option><option value="spent" {{ 'selected' if sort=='spent' }}>Top spenders</option><option value="orders" {{ 'selected' if sort=='orders' }}>Most hacks bought</option><option value="bal" {{ 'selected' if sort=='bal' }}>Highest balance</option></select>
+<button style="margin:0">Search</button></form><br>
+<div class="chips">{% for k,lab in [('all','All'),('usr','Users'),('res','Resellers'),('unv','Not verified'),('ban','Banned')] %}<a class="chip {{ 'on' if f==k }}" href="/users?f={{ k }}&sort={{ sort }}&q={{ q|urlencode }}">{{ lab }} <b>{{ cnt[k] }}</b></a>{% endfor %}</div>
+<div class="card tw"><table><tr><th>Telegram ID</th><th>Name</th><th>Phone</th><th>Account</th><th>Hacks bought</th><th>Spent</th><th>Balance</th><th></th></tr>
+{% for u in rows %}<tr><td><a class="lk" href="/users/{{ u.id }}"><code>{{ u.id }}</code></a></td><td><a class="lk" href="/users/{{ u.id }}"><b>{{ u.name }}</b></a>{% if u.username %}<br><span class="mu">@{{ u.username }}</span>{% endif %}</td><td>{{ u.phone or '-' }}</td>
+<td><span class="bd {{ 'no' if u.banned else 'ok' }}">{{ 'banned' if u.banned else u.role }}</span>{% if not u.verified %}<br><span class="mu">not verified</span>{% endif %}</td><td>{{ u.hacks }}</td><td>{{ u.symbol }}{{ '%.2f'|format(u.spent) }}</td>
+<td>{{ u.symbol }}{{ '%.2f'|format(u.balance) }}{% set h_ = [[u.refund_hold or 0, u.balance]|min, 0]|max %}{% if h_ > 0 %}<br><span class="wt">Refund hold: {{ '%.2f'|format(h_) }}</span>{% endif %}</td>
+<td><a href="/users/{{ u.id }}"><button type="button" style="margin:0">Profile</button></a></td></tr>{% endfor %}
+{% if not rows %}<tr><td colspan="8" class="mu">No users found.</td></tr>{% endif %}</table></div>
+<div class="row" style="justify-content:center">{% if pg > 1 %}<a href="/users?f={{ f }}&sort={{ sort }}&q={{ q|urlencode }}&p={{ pg-1 }}"><button type="button" class="sec">← Prev</button></a>{% endif %}<span class="mu">Page {{ pg }} / {{ pages }}</span>{% if pg < pages %}<a href="/users?f={{ f }}&sort={{ sort }}&q={{ q|urlencode }}&p={{ pg+1 }}"><button type="button" class="sec">Next →</button></a>{% endif %}</div>{% endblock %}"""
+
+PROFILE = """{% extends 'base.html' %}{% block body %}{% set u = d.u %}
+<div class="ph"><h1>{{ u.name }} <span class="bd {{ 'no' if u.banned else 'ok' }}">{{ 'banned' if u.banned else u.role }}</span></h1><a href="/users"><button type="button" class="sec" style="margin:0">← All users</button></a></div>
+<div class="grid">
+<div class="card stat"><i>🛒</i><b>{{ d.hacks }}</b><span>Hacks bought</span></div><div class="card stat"><i>💸</i><b>{{ u.symbol }}{{ '%.2f'|format(d.spent) }}</b><span>Total spent</span></div>
+<div class="card stat"><i>👛</i><b>{{ u.symbol }}{{ '%.2f'|format(u.balance) }}</b><span>Wallet balance</span></div><div class="card stat"><i>📥</i><b>{{ u.symbol }}{{ '%.2f'|format(d.deposited) }}</b><span>Total deposited</span></div>
+<div class="card stat"><i>🎁</i><b>{{ u.symbol }}{{ '%.2f'|format(u.ref_balance or 0) }}</b><span>Referral balance</span></div><div class="card stat"><i>👥</i><b>{{ d.nrefs }}</b><span>People referred</span></div></div>
+<div class="card"><h3>Profile</h3><div class="tw"><table>
+<tr><td class="mu">Telegram ID / Chat ID</td><td><code>{{ u.id }}</code></td></tr>
+<tr><td class="mu">Username</td><td>{% if u.username %}<a class="lk" href="https://t.me/{{ u.username }}" target="_blank" rel="noopener">@{{ u.username }}</a>{% else %}-{% endif %}</td></tr>
+<tr><td class="mu">Phone</td><td>{{ u.phone or '-' }}</td></tr><tr><td class="mu">Country</td><td>{{ u.country }} · {{ u.currency }}</td></tr>
+<tr><td class="mu">Account type</td><td>{{ u.role }}</td></tr><tr><td class="mu">Verified</td><td>{{ 'Yes' if u.verified else 'No' }}</td></tr><tr><td class="mu">Banned</td><td>{{ 'YES' if u.banned else 'No' }}</td></tr>
+<tr><td class="mu">Joined</td><td>{{ u.joined|dts }}</td></tr>
+<tr><td class="mu">First / last purchase</td><td>{{ d.first|dts if d.first else '-' }}{% if d.last %} &nbsp;→&nbsp; {{ d.last|dts }}{% endif %}</td></tr>
+<tr><td class="mu">Referred by</td><td>{% if d.refby %}<a class="lk" href="/users/{{ d.refby.id }}">{{ d.refby.name }} ({{ d.refby.id }})</a>{% else %}-{% endif %}</td></tr>
+{% set h_ = [[u.refund_hold or 0, u.balance]|min, 0]|max %}{% if h_ > 0 %}<tr><td class="mu">Refund hold</td><td class="wt">{{ '%.2f'|format(h_) }}</td></tr>{% endif %}</table></div></div>
+<div class="card"><h3>Actions</h3><form method="post" action="/users/{{ u.id }}" class="row" style="flex-wrap:wrap"><input type="hidden" name="csrf" value="{{ csrf() }}">
+<input name="amt" placeholder="+100 / -50" style="width:100px;flex:none"><label style="margin:0;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" name="hold" value="1" style="width:auto"> refund hold</label><button name="a" value="bal" style="margin:0">Balance</button>
+{% if (u.refund_hold or 0) > 0 and u.balance > 0 %}<button name="a" value="rok" style="margin:0" onclick="return confirm('Approve the refunded money?')">Approve refund</button><button name="a" value="rno" class="red" style="margin:0" onclick="return confirm('Take the refunded money back?')">Deduct refund</button>{% endif %}
+<button name="a" value="role" style="margin:0">{{ 'Make user' if u.role=='reseller' else 'Make reseller' }}</button><button name="a" value="ban" class="red" style="margin:0">{{ 'Unban' if u.banned else 'Ban' }}</button></form>
+<form method="post" action="/users/{{ u.id }}" class="row" style="margin-top:12px"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="msg"><input name="text" placeholder="Send a message to this user on Telegram..." required><button style="margin:0">Send</button></form></div>
+<div class="card"><h3>Hacks bought - by product</h3><div class="tw"><table><tr><th>Product</th><th>Times</th><th>Spent</th></tr>{% for r in d.by_product %}<tr><td>{{ r.product }}</td><td>{{ r.n }}</td><td>{{ u.symbol }}{{ '%.2f'|format(r.s) }}</td></tr>{% endfor %}{% if not d.by_product %}<tr><td colspan="3" class="mu">No purchases yet.</td></tr>{% endif %}</table></div></div>
+<div class="card"><h3>Order history ({{ d.hacks }})</h3><div class="tw"><table><tr><th>Date</th><th>Order</th><th>Product</th><th>Plan</th><th>Price</th><th>Key</th></tr>{% for o in d.orders %}<tr><td>{{ o.created|dts }}</td><td><code>{{ o.order_no }}</code></td><td>{{ o.product }}</td><td>{{ o.plan }}</td><td>{{ u.symbol }}{{ '%.2f'|format(o.price) }}</td><td><code>{{ o.key }}</code></td></tr>{% endfor %}{% if not d.orders %}<tr><td colspan="6" class="mu">No orders.</td></tr>{% endif %}</table></div></div>
+<div class="card"><h3>Deposit history</h3><div class="tw"><table><tr><th>Date</th><th>Amount</th><th>Status</th><th>Transaction / UTR</th></tr>{% for x in d.deposits %}<tr><td>{{ x.created|dts }}</td><td>{{ u.symbol }}{{ '%.2f'|format(x.amount) }}</td><td><span class="bd {{ 'ok' if x.status=='paid' else 'no' if x.status in ('rejected','cancelled') else '' }}">{{ x.status }}</span></td><td><code>{{ x.utr or '-' }}</code></td></tr>{% endfor %}{% if not d.deposits %}<tr><td colspan="4" class="mu">No deposits.</td></tr>{% endif %}</table></div></div>
+{% if d.refs %}<div class="card"><h3>People referred ({{ d.nrefs }})</h3><div class="tw"><table><tr><th>ID</th><th>Name</th><th>Joined</th></tr>{% for r in d.refs %}<tr><td><a class="lk" href="/users/{{ r.id }}"><code>{{ r.id }}</code></a></td><td>{{ r.name }}{% if r.username %} <span class="mu">@{{ r.username }}</span>{% endif %}</td><td>{{ r.joined|dts }}</td></tr>{% endfor %}</table></div></div>{% endif %}{% endblock %}"""
 
 PRODUCTS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Products</h1><a href="/products/new"><button type="button" style="margin:0">+ Add product</button></a></div>
 <div class="chips"><a class="chip {{ 'on' if cf=='all' }}" href="/products">All <b>{{ n_all }}</b></a>{% for c in cats() %}<a class="chip {{ 'on' if cf==c.id|string }}" href="/products?cat={{ c.id }}">{{ c.name }} <b>{{ c.nprod }}</b></a>{% endfor %}<a class="chip {{ 'on' if cf=='none' }}" href="/products?cat=none">No category <b>{{ n_none }}</b></a></div>
-<form id="bulk" method="post" action="/products/bulk"><input type="hidden" name="csrf" value="{{ csrf() }}"></form>
+<form id="bulk" method="post" action="/products/bulk"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="confirm" id="dc" value=""></form>
 <div class="bar"><label class="chk"><input type="checkbox" id="selall"> Select all</label><span class="mu" id="cnt">0 selected</span>
 <input type="search" id="q" placeholder="Search product..." autocomplete="off">
 <select name="cat_id" form="bulk"><option value="">Move selected to category...</option><option value="0">- no category -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
-<button form="bulk" name="a" value="move">Move</button><button form="bulk" name="a" value="show" class="sec">Show</button><button form="bulk" name="a" value="hide" class="sec">Hide</button></div>
+<button form="bulk" name="a" value="move">Move</button><button form="bulk" name="a" value="show" class="sec">Show</button><button form="bulk" name="a" value="hide" class="sec">Hide</button>
+<button form="bulk" name="a" value="del" class="red" onclick="var n=document.querySelectorAll('.pc:checked').length;if(!n){alert('Tick at least one product first');return false}return confirm('Delete '+n+' selected product(s) with all their plans and unsold keys? This cannot be undone.')">🗑️ Delete selected</button>
+<button form="bulk" name="a" value="delall" class="red" onclick="var t=prompt('This deletes ALL products (every category) with their plans and unsold keys.\\nType DELETE to confirm:');if(t!=='DELETE'){return false}document.getElementById('dc').value=t;return true">Delete ALL</button></div>
 <div class="card tw"><table id="ptab"><tr><th></th><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Status</th><th></th></tr>
 {% for p in rows %}<tr data-n="{{ p.name|lower }}"><td><input class="pc" type="checkbox" name="pid" value="{{ p.id }}" form="bulk"></td><td><a class="lk" href="/products/{{ p.id }}"><b>{{ p.name }}</b></a></td>
 <td><form method="post" action="/products/{{ p.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="setcat"><select name="cat_id" style="min-width:140px" onchange="this.form.requestSubmit()"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select></form></td>
@@ -331,7 +362,20 @@ Last successful backup: <b>{{ st.last_ok|ts if st.last_ok else 'never' }}</b> {%
 {% if st.last_err %}<span class="no">Last error: {{ st.last_err }}</span>{% endif %}</p>
 {% if not gh %}<p class="mu">Add env vars on Render: <b>GH_TOKEN</b> (fine-grained token, Contents: read &amp; write), <b>GH_REPO</b> (e.g. yourname/rg-backup — keep it PRIVATE). Without it, data is lost when Render restarts.</p>{% endif %}
 <form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><button name="a" value="now">Backup now</button>
-<button name="a" value="tg">Backup now + send to my Telegram</button></form></div>
+<button name="a" value="send">📤 Send Backup</button></form>
+<p class="mu">"Send Backup" makes a backup and sends the file to the Chat ID saved below.</p></div>
+<div class="card"><h3>⏱ Auto Backup Timer</h3>
+<p>Status: <b class="{{ 'ok' if ac.on else 'no' }}">{{ 'ON' if ac.on else 'OFF' }}</b>
+{% if ac.on and ac.chat %} &middot; every <b>{{ ac.hours }}</b> hour(s) &rarr; <code>{{ ac.chat }}</code>{% endif %}<br>
+{% if ac.on and ac.next %}Next auto backup: <b>{{ ac.next|ts }}</b><br>{% endif %}
+{% if ac.last %}Last auto backup: <b>{{ ac.last|ts }}</b><br>{% endif %}
+{% if st.auto_err %}<span class="no">Auto backup error: {{ st.auto_err }} (retrying every 5 min)</span>{% endif %}</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="auto">
+<label>Chat ID (user, group or channel)</label><input name="chat" value="{{ ac.chat }}" placeholder="e.g. 123456789 or -1001234567890" required>
+<label>Send a backup every (hours)</label><input name="hours" value="{{ ac.hours }}" placeholder="e.g. 1, 6, 12, 24, 0.5" required>
+<label><input type="checkbox" name="on" value="1" {{ 'checked' if ac.on else '' }}> Turn automatic backup ON</label>
+<button>Save</button></form>
+<p class="mu">A personal Chat ID needs you to press /start on the bot first. For a group or channel, add the bot there (channel: as admin). Minimum 0.25 hour (15 min). First backup is sent within a minute after you turn it ON.</p></div>
 <div class="card"><h3>Download</h3><a class="lk" href="/backup/download">Download database file (.db.gz)</a></div>
 <div class="card"><h3>Restore</h3><p class="mu">Upload a .db or .db.gz backup. This REPLACES all current data.</p>
 <form method="post" enctype="multipart/form-data" onsubmit="return confirm('Replace ALL current data with this backup?')"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="restore">
@@ -373,7 +417,28 @@ The customer taps a category and sees only the products of that category. Make a
 NEWPRODUCT = '{% extends \'base.html\' %}{% block body %}<h1>Add product</h1>\n<div class="card"><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Product name</label><input name="name" required placeholder="e.g. Br Mods Pc Emulator">\n<label>Update group link (Join Telegram button after purchase) - optional</label><input name="link" placeholder="https://t.me/yourgroup">\n<label>Premium emoji ID for this product - optional</label><input name="emoji_id" inputmode="numeric" placeholder="premium emoji ID">\n<label>Category - optional</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>\n<h3>Plans</h3><p class="mu">Duration + Hours/Days, then User price and Reseller price (INR). Press <b>+ Add another plan</b> for more. Reseller price empty = same as user price.</p>\n<div id="rows"></div><button type="button" onclick="addRow()" style="margin:6px 0">+ Add another plan</button>\n<script>function addRow(){var d=document.createElement(\'div\');d.className=\'row\';d.style.cssText=\'flex-wrap:wrap;gap:6px;margin:8px 0\';\nd.innerHTML=\'<input name="dur" type="number" min="1" step="1" placeholder="Duration" style="width:95px;flex:none" required><select name="unit" style="width:95px;flex:none"><option value="hours">Hours</option><option value="days" selected>Days</option></select><input name="uprice" placeholder="User price" style="width:110px;flex:none" required><input name="rprice" placeholder="Reseller price" style="width:125px;flex:none"><button type="button" class="red" style="margin:0" onclick="this.parentNode.remove()">X</button>\';\ndocument.getElementById(\'rows\').appendChild(d)}addRow();</script>\n<button>Save product</button></form></div>{% endblock %}'
 FIND = '{% extends \'base.html\' %}{% block body %}<h1>Find order</h1>\n<form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Order ID (ORD… / WAL…), transaction ID or user ID" autofocus><button style="margin:0">Find user</button></form><br>\n{% if q and not hits %}<div class="card">Nothing found for <b>{{ q }}</b>.</div>{% endif %}\n{% for h in hits %}<div class="card"><h3>{{ h.kind }}</h3>\n<p><b>Order ID:</b> {{ h.ref }}</p>\n{% for k, v in h.info %}<p class="mu">{{ k }}: <b>{{ v }}</b></p>{% endfor %}\n<p><b>User:</b> {{ h.uname or \'-\' }} · <b>ID:</b> {{ h.uid }} · <b>Username:</b> {{ (\'@\' + h.username) if h.username else \'-\' }}<br><b>Phone:</b> {{ h.phone or \'-\' }} · <b>Wallet:</b> ₹{{ \'%.2f\'|format(h.balance) }}</p>\n<a class="lk" href="/users?q={{ h.uid }}">Open user</a></div>{% endfor %}{% endblock %}'
 PANEL = '{% extends \'base.html\' %}{% block body %}<h1>Panel API</h1>\n<div class="card"><h3>1. Connect to your panel</h3>\n<p class="mu">Paste the API token of your main website and press <b>Save &amp; Connect</b>. You can change the token or the server URL any time.</p>\n<form method="post" action="/panel/connect"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Server URL</label><input name="panel_url" value="{{ gs(\'panel_url\') or default_url }}">\n<label>API token</label><input name="panel_token" value="{{ gs(\'panel_token\') }}" autocomplete="off" placeholder="paste API token">\n<button>Save &amp; Connect</button> <button type="submit" formaction="/panel/balance">Check Balance</button>\n<a class="lk" href="/panel/products"><button type="button">Show Products</button></a></form>\n<p class="mu">Status: <b class="{{ \'ok\' if gs(\'panel_connected\')==\'1\' else \'no\' }}">{{ \'Connected\' if gs(\'panel_connected\')==\'1\' else (\'Token saved - press Save & Connect\' if gs(\'panel_token\') else \'Not connected\') }}</b></p></div>\n<div class="card"><h3>2. Your prices (percentage on the panel price)</h3>\n<p class="mu">Every product you add gets its prices automatically: <b>panel price + your %</b>. Change the % and press <b>Save &amp; apply</b> - all products are updated at once, no need to edit each price.</p>\n<form method="post" action="/panel/markup"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Reseller % (reseller price = panel price + this %)</label><input name="mk_reseller" value="{{ rp }}">\n<label>User % (user price = panel price + this %)</label><input name="mk_user" value="{{ up }}">\n<p class="mu">Example: panel price ₹100 &rarr; reseller <b>₹{{ \'%.2f\'|format(ex_r) }}</b> &middot; user <b>₹{{ \'%.2f\'|format(ex_u) }}</b></p>\n<button name="a" value="save">Save %</button>\n<button name="a" value="apply" class="red" onclick="return confirm(\'Recalculate the price of ALL panel products with these percentages? Prices you edited by hand are overwritten too.\')">Save &amp; apply to ALL products</button></form></div>\n<div class="card"><h3>3. Your panel products</h3>\n<p class="mu">In the shop: <b>{{ np }}</b> panel product(s), <b>{{ nl }}</b> plan(s). Press <b>Show Products</b> above to see everything on your panel and add the ones you want (or all).</p>\n<form method="post" action="/panel/auto"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Auto price sync (keeps panel prices up to date, then applies your %)</label>\n<select name="panel_autosync"><option value="1" {{ \'selected\' if gs(\'panel_autosync\')!=\'0\' }}>ON</option><option value="0" {{ \'selected\' if gs(\'panel_autosync\')==\'0\' }}>OFF</option></select>\n<label>Sync every (minutes, 5 - 1440)</label><input name="panel_sync_min" value="{{ gs(\'panel_sync_min\') }}">\n<button>Save</button> <button type="submit" formaction="/panel/sync">Sync prices now</button></form>\n<p class="mu">Last sync: {{ (gs(\'panel_last_sync\')|int)|ts if gs(\'panel_last_sync\')|int else \'never\' }}</p></div>{% endblock %}'
-PANELPROD = '{% extends \'base.html\' %}{% block body %}<h1>Panel products</h1>\n<p class="mu"><a class="lk" href="/panel">&larr; back to Panel API</a> &middot; Percentages now: reseller <b>+{{ rp }}%</b>, user <b>+{{ up }}%</b></p>\n<form method="post" action="/panel/add"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<div class="card"><label style="margin-top:0">Put new products into category (only products without a category are changed)</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select><button name="a" value="selected">Add selected</button> <button name="a" value="all" class="red" onclick="return confirm(\'Add ALL {{ rows|length }} products?\')">Add ALL products</button>\n<label style="margin-top:12px"><input type="checkbox" style="width:auto" onclick="document.querySelectorAll(\'.pc\').forEach(function(x){x.checked=this.checked}.bind(this))"> Select all</label></div>\n{% for r in rows %}<div class="card"><label style="margin:0;color:var(--tx);font-size:15px"><input class="pc" type="checkbox" name="pid" value="{{ r.id }}" style="width:auto"> <b>{{ r.name }}</b> <span class="mu">(panel #{{ r.id }})</span> {% if r.added %}<span class="bd ok">Added</span>{% endif %}</label>\n<div class="tw"><table><tr><th>Plan</th><th>Panel price</th><th>Reseller price</th><th>User price</th></tr>\n{% for pl in r.plans %}<tr><td>{{ pl.name }}</td><td>₹{{ \'%.2f\'|format(pl.base) }}</td><td>₹{{ \'%.2f\'|format(pl.res) }}</td><td>₹{{ \'%.2f\'|format(pl.usr) }}</td></tr>{% endfor %}</table></div></div>{% endfor %}\n{% if not rows %}<div class="card">No products found on the panel.</div>{% endif %}</form>{% endblock %}'
+PANELPROD = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Panel products</h1><a href="/panel/products"><button type="button" style="margin:0">🔄 Refresh</button></a></div>
+<p class="mu"><a class="lk" href="/panel">&larr; back to Panel API</a> &middot; Percentages now: reseller <b>+{{ rp }}%</b>, user <b>+{{ up }}%</b> &middot; Every time you open or refresh this page the list is read fresh from your panel.</p>
+<form method="post" action="/panel/add" id="pf"><input type="hidden" name="csrf" value="{{ csrf() }}">
+<div class="chips"><button type="button" class="chip on" data-m="all">All <b>{{ rows|length }}</b></button><button type="button" class="chip" data-m="new">🆕 New <b>{{ n_new }}</b></button><button type="button" class="chip" data-m="added">✅ Added <b>{{ rows|length - n_new }}</b></button></div>
+<div class="bar"><label class="chk"><input type="checkbox" id="selall"> Select all</label><span class="mu" id="cnt">0 selected</span>
+<input type="search" id="q" placeholder="Search product..." autocomplete="off">
+<select name="cat_id"><option value="0">Category for new products...</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+<button name="a" value="selected">➕ Add selected</button><button name="a" value="allnew" class="grn" onclick="return confirm('Add all {{ n_new }} NEW product(s) to your shop?')">Add all NEW</button></div>
+{% for r in rows %}<div class="card pcard" data-n="{{ r.name|lower }}" data-new="{{ 0 if r.added else 1 }}"><label style="margin:0;color:var(--tx);font-size:15px"><input class="pc" type="checkbox" name="pid" value="{{ r.id }}" style="width:auto"> <b>{{ r.name }}</b> <span class="mu">(panel #{{ r.id }})</span> {% if r.added %}<span class="bd ok">Added</span>{% else %}<span class="bd" style="background:#f59e0b;color:#111">🆕 NEW</span>{% endif %}</label>
+<div class="tw"><table><tr><th>Plan</th><th>Panel price</th><th>Reseller price</th><th>User price</th></tr>
+{% for pl in r.plans %}<tr><td>{{ pl.name }}</td><td>₹{{ '%.2f'|format(pl.base) }}</td><td>₹{{ '%.2f'|format(pl.res) }}</td><td>₹{{ '%.2f'|format(pl.usr) }}</td></tr>{% endfor %}</table></div></div>{% endfor %}
+{% if not rows %}<div class="card">No products found on the panel.</div>{% endif %}</form>
+<script>(function(){var q=document.getElementById('q'),all=document.getElementById('selall'),cnt=document.getElementById('cnt'),mode='all';
+function cards(){return [].slice.call(document.querySelectorAll('.pcard'))}
+function vis(){return cards().filter(function(c){return c.style.display!=='none'})}
+function upd(){cnt.textContent=document.querySelectorAll('.pc:checked').length+' selected'}
+function apply(){var s=q.value.toLowerCase().trim();cards().forEach(function(c){var n=c.getAttribute('data-new')==='1';var ok=c.getAttribute('data-n').indexOf(s)>=0&&(mode==='all'||(mode==='new'&&n)||(mode==='added'&&!n));c.style.display=ok?'':'none'})}
+q.oninput=apply;q.onkeydown=function(e){if(e.key==='Enter')e.preventDefault()};
+all.onchange=function(){vis().forEach(function(c){c.querySelector('.pc').checked=all.checked});upd()};
+document.querySelectorAll('.pc').forEach(function(c){c.onchange=upd});
+document.querySelectorAll('.chip[data-m]').forEach(function(b){b.onclick=function(){mode=b.getAttribute('data-m');document.querySelectorAll('.chip[data-m]').forEach(function(x){x.classList.toggle('on',x===b)});apply()}});
+})();</script>{% endblock %}"""
 BOTCFG = """{% extends 'base.html' %}{% block body %}<h1>Bot Token &amp; Admin</h1>
 <div class="card"><h3>Status</h3><p>Bot: <b class="{{ 'ok' if running else 'no' }}">{{ status }}</b></p>
 <p class="mu">Telegram bot token: <b>{{ tok }}</b> &nbsp;·&nbsp; Admin ID: <b>{{ admin }}</b></p></div>
@@ -399,7 +464,7 @@ function fail(t){sp.style.display='none';m.innerHTML='🚫 '+t+'<br><br><a href=
 try{var w=window.Telegram&&Telegram.WebApp;if(!w||!w.initData){fail('Open this page from the bot (/website).');return}
 w.ready();w.expand&&w.expand();
 fetch('/tg-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:w.initData})})
-.then(function(r){return r.json()}).then(function(j){if(j.ok){location.replace('/')}else{fail(j.err||'Not allowed.')}})
+.then(function(r){return r.json()}).then(function(j){if(j.ok){var nx=new URLSearchParams(location.search).get('next')||'/';if(nx.charAt(0)!=='/'||nx.charAt(1)==='/')nx='/';location.replace(nx)}else{fail(j.err||'Not allowed.')}})
 .catch(function(){fail('Network error. Try again.')})}catch(e){fail('Error. Try again.')}})();
 </script></body></html>"""
 
@@ -424,7 +489,7 @@ BANNED_PAGE = """<!doctype html><html><head><meta charset="utf-8"><meta name="vi
 @keyframes p{0%,100%{background:#7f0d0d}50%{background:#c81e1e}}.c{padding:28px;max-width:380px}h1{font-size:30px;margin:10px 0}.i{font-size:64px}</style></head>
 <body><div class="c"><div class="i">🚨</div><h1>ACCESS BLOCKED</h1><p>This device has been <b>banned</b>.<br>The owner denied this login attempt.</p></div></body></html>"""
 
-app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "assign.html": ASSIGN, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
+app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "assign.html": ASSIGN, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS, "profile.html": PROFILE})
 
 
 def csrf():
@@ -440,6 +505,7 @@ def public_url():
 
 app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), cats=lambda: db.cats(False), gw_on=gateway.configured,
                              webhook_url=lambda: public_url() + "/webhook/gateway")
+app.jinja_env.filters["dts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %Y %H:%M") if t else "-"
 app.jinja_env.filters["ts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %H:%M")
 
 
@@ -757,13 +823,27 @@ def settings():
 @app.route("/users")
 def users():
     q = request.args.get("q", "").strip()
-    with db.conn() as c:
-        if q:
-            like = f"%{q}%"
-            rows = c.execute("SELECT * FROM users WHERE CAST(id AS TEXT) LIKE ? OR name LIKE ? OR phone LIKE ? ORDER BY joined DESC LIMIT 50", (like, like, like)).fetchall()
-        else:
-            rows = c.execute("SELECT * FROM users ORDER BY joined DESC LIMIT 50").fetchall()
-    return page("users", rows=rows, q=q, tab="users")
+    f = request.args.get("f", "all")
+    sort = request.args.get("sort", "new")
+    try:
+        pg = max(int(request.args.get("p", "1")), 1)
+    except ValueError:
+        pg = 1
+    per = 30
+    rows, total = db.search_users(q, f, sort, per, (pg - 1) * per)
+    if q and total == 1 and pg == 1:              # one match -> open the profile directly
+        return redirect(f"/users/{rows[0]['id']}")
+    pages = max((total + per - 1) // per, 1)
+    return page("users", rows=rows, q=q, f=f, sort=sort, pg=pg, pages=pages, total=total, cnt=db.user_counts(), tab="users")
+
+
+@app.route("/users/<int:uid>", methods=["GET"])
+def user_profile(uid):
+    d = db.user_profile(uid)
+    if not d:
+        flash("User not found")
+        return redirect("/users")
+    return page("profile", d=d, tab="users", title=d["u"]["name"])
 
 
 @app.route("/users/<int:uid>", methods=["POST"])
@@ -784,6 +864,10 @@ def user_action(uid):
             c.execute("UPDATE users SET role=CASE role WHEN 'reseller' THEN 'user' ELSE 'reseller' END WHERE id=?", (uid,))
         elif a == "ban":
             c.execute("UPDATE users SET banned=1-banned WHERE id=?", (uid,))
+    if a == "msg":
+        txt = request.form.get("text", "").strip()
+        r = bot.send(uid, bot.esc(txt)) if txt else {"ok": False}
+        flash("Message sent." if r.get("ok") else "Could not send (the user blocked the bot or never started it).")
     if a in ("rok", "rno"):
         ok = a == "rok"
         amt = db.hold_decide(uid, ok)
@@ -927,12 +1011,29 @@ def products_bulk():
     f, a = request.form, request.form.get("a")
     ids = [int(x) for x in f.getlist("pid") if x.isdigit()][:900]
     back = request.referrer or "/products"
+    if a == "delall":                                   # V18: delete EVERY product (must type DELETE)
+        if f.get("confirm", "").strip() != "DELETE":
+            flash("⚠️ Nothing deleted - you did not confirm")
+            return redirect(back)
+        with db.conn() as c:
+            n = c.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+            c.execute("DELETE FROM keys WHERE used=0 AND plan_id IN (SELECT id FROM plans)")
+            c.execute("DELETE FROM plans")
+            c.execute("DELETE FROM products")
+        db.emoji_clear()
+        flash(f"🗑️ ALL {n} product(s) deleted")
+        return redirect("/products")
     if not ids:
         flash("⚠️ Tick at least one product first")
         return redirect(back)
     q = ",".join("?" * len(ids))
     with db.conn() as c:
-        if a == "move":
+        if a == "del":
+            c.execute(f"DELETE FROM keys WHERE used=0 AND plan_id IN (SELECT id FROM plans WHERE product_id IN ({q}))", ids)
+            c.execute(f"DELETE FROM plans WHERE product_id IN ({q})", ids)
+            c.execute(f"DELETE FROM products WHERE id IN ({q})", ids)
+            flash(f"🗑️ {len(ids)} product(s) deleted")
+        elif a == "move":
             if f.get("cat_id", "") == "":
                 flash("⚠️ Choose a category in the box first")
                 return redirect(back)
@@ -1091,8 +1192,14 @@ def orders():
 def backup_page():
     if request.method == "POST":
         a = request.form.get("a")
-        if a in ("now", "tg"):
-            ok, msg = backup.run_now((lambda b: bot.send_doc_admin("backup_" + time.strftime("%Y%m%d_%H%M") + ".db.gz", b)) if a == "tg" else None)
+        if a == "now":
+            ok, msg = backup.run_now()
+            flash(msg)
+        elif a == "send":                      # V18: Send Backup -> goes to the saved Chat ID
+            ok, msg = backup.send_backup(bot.send_doc_to)
+            flash(msg)
+        elif a == "auto":                      # V18: timer settings
+            ok, msg = backup.save_auto(request.form.get("chat"), request.form.get("hours"), request.form.get("on") == "1")
             flash(msg)
         elif a == "restore":
             f = request.files.get("f")
@@ -1103,7 +1210,7 @@ def backup_page():
             else:
                 flash("Restore failed: not a valid backup file")
         return redirect("/backup")
-    return page("backup", st=backup.STATUS, gh=backup.enabled(), tab="backup")
+    return page("backup", st=backup.STATUS, gh=backup.enabled(), ac=backup.auto_info(), tab="backup")
 
 
 @app.route("/backup/download")
@@ -1404,20 +1511,33 @@ def panel_products():
             u_, r_ = panel.calc(base, rp, up)
             pls.append({"name": pl.get("name"), "base": base, "usr": u_, "res": r_})
         rows.append({"id": pid, "name": p.get("name") or f"Product {pid}", "plans": pls, "added": pid in have})
-    return page("panelprod", tab="panel", rows=rows, rp=("%g" % rp), up=("%g" % up))
+    rows.sort(key=lambda r: r["added"])                 # NEW products first
+    return page("panelprod", tab="panel", rows=rows, rp=("%g" % rp), up=("%g" % up), n_new=sum(1 for r in rows if not r["added"]))
 
 
 @app.route("/panel/add", methods=["POST"])
 def panel_add():
     f = request.form
-    ids = None
-    if f.get("a") != "all":
+    ids, plist = None, None
+    if f.get("a") == "allnew":                           # V18: every product that is not in the shop yet
+        try:
+            plist = panel.products()
+        except panel.PanelError as e:
+            flash("❌ " + e.msg)
+            return redirect("/panel/products")
+        with db.conn() as c:
+            have = {r["api_pid"] for r in c.execute("SELECT api_pid FROM products WHERE api_pid>0")}
+        ids = [int(p["product_id"]) for p in plist if str(p.get("product_id", "")).isdigit() and int(p["product_id"]) not in have]
+        if not ids:
+            flash("No new products - everything on the panel is already in your shop")
+            return redirect("/panel/products")
+    elif f.get("a") != "all":
         ids = [int(x) for x in f.getlist("pid") if x.isdigit()]
         if not ids:
             flash("Select at least one product")
             return redirect("/panel/products")
     try:
-        np_, nl, ul = panel.import_products(ids)          # always read fresh from the panel
+        np_, nl, ul = panel.import_products(ids, plist)   # read fresh from the panel
     except panel.PanelError as e:
         flash("❌ " + e.msg)
         return redirect("/panel/products")

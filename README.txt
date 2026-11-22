@@ -186,3 +186,32 @@ Owner + admins: /broadcast  (or /admin -> Broadcast).
    - Delete from all: removes the message from every user's chat.
    Voice and round-video messages can be deleted but not edited (Telegram does not allow editing them).
 4) The website Broadcast page still works as before (text only).
+
+================ V17 - USERS: SEARCH + FULL PROFILE ================
+Files changed: web.py, db.py, bot.py, secure.py.  Replace ALL files and redeploy. Old data is kept.
+1) Website -> Users: every user in pages of 30, with Telegram ID, name + @username, phone, account type, Hacks bought, Spent, Balance.
+   Filters: All / Users / Resellers / Not verified / Banned (with counts).  Sort: Newest / Top spenders / Most hacks bought / Highest balance.
+2) SEARCH box: Telegram ID (= chat ID), phone number (+91 / spaces are ignored), @username, or name.  Exactly one match opens the profile at once.
+3) PROFILE page (click a user): hacks bought, total spent, wallet balance, total deposited, referral balance, people referred,
+   Telegram ID, @username (opens Telegram), phone, country, account type, verified / banned, joined, first + last purchase, referred by,
+   hacks bought per product, FULL order history with every key, deposit history, list of people he referred.
+   Actions on the profile: add / remove balance (+ refund hold), approve / deduct refund, make reseller / user, ban / unban,
+   and "send a message to this user" on Telegram.
+4) Bot (owner + admins): /user <Telegram ID | @username | phone>  -> profile card in the chat + "Full profile (website)" button (opens that profile, no login).
+
+================ V18 - BACKUP TIMER + SEND TO ANY CHAT ID ================
+Files changed: backup.py, bot.py, web.py, main.py.  Replace ALL files and redeploy. Old data is kept.
+Website -> Backup:
+1) AUTO BACKUP TIMER: type a Chat ID, type every how many hours (1, 6, 12, 24 ... or 0.5 = 30 min, minimum 0.25), tick "Turn automatic backup ON", press Save.
+   The bot then sends the database backup file to that Chat ID automatically, every N hours, even after a Render restart (last send time is stored).
+   The first backup is sent within a minute after you turn it ON. If Telegram refuses (wrong ID, bot not started / not in the group), the page shows the error and it retries every 5 minutes.
+2) SEND BACKUP button: makes a backup right now (GitHub too) and sends the file to the saved Chat ID.
+3) Chat ID can be a person (he must press /start on the bot first), a group, or a channel (add the bot as admin). Groups / channels look like -1001234567890.
+4) Timer OFF = old behaviour (file goes to the owner every 6 hours if data changed).
+
+V18 (2) - DELETE MANY PRODUCTS + NEW PANEL PRODUCTS  (file changed: web.py)
+Website -> Products: tick products (or "Select all", it also works with the search box / category filter) -> "Delete selected".
+  "Delete ALL" removes every product; you must type DELETE to confirm. Plans and unsold keys of those products are removed, old orders/history stay.
+Website -> Panel API -> Show Products: the list is read fresh from your panel every time you open or press Refresh.
+  New products (not in your shop yet) show first with a 🆕 NEW badge. Chips: All / New / Added, plus a search box.
+  Tick the ones you want -> "Add selected" (choose a category if you like), or "Add all NEW" to add every new product at once. Prices use your % automatically.

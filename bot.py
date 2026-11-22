@@ -1494,6 +1494,11 @@ def send_doc_admin(name, blob, caption="Database backup"):
         api_file("sendDocument", {"document": (name, blob)}, chat_id=ADMIN_ID, caption=caption)
 
 
+def send_doc_to(chat, name, blob, caption="Database backup"):
+    """V18: send a file to ANY chat id (user / group / channel). Returns the Telegram reply."""
+    return api_file("sendDocument", {"document": (name, blob)}, chat_id=chat, caption=caption)
+
+
 def broadcast(text, only_ids=None, done=None):
     """background broadcast, ~20 msgs/sec"""
     def job():
@@ -1591,6 +1596,25 @@ def do_remove_admin(chat, raw_id, quiet=False):
     safe(send, int(raw_id), "⛔ Your admin access was removed.")
     if not quiet:
         send(chat, f"✅ Admin removed: <code>{raw_id}</code>")
+
+
+def user_card(p):
+    u = p["u"]
+    return (f"👤 <b>{esc(u['name'])}</b>" + (f" · @{esc(u['username'])}" if u["username"] else "") + "\n━━━━━━━━━━━━━━\n"
+            f"🆔 <code>{u['id']}</code>\n📱 {esc(u['phone'] or '-')} · {esc(u['country'])}\n"
+            f"👑 {u['role']}" + (" · 🚫 BANNED" if u["banned"] else "") + (" · not verified" if not u["verified"] else "") + "\n"
+            f"📅 Joined {ist(u['joined'], '%d %b %Y')}\n\n"
+            f"🛒 Hacks bought: <b>{p['hacks']}</b>\n💸 Spent: <b>{u['symbol']}{p['spent']:.2f}</b>\n"
+            f"👛 Balance: <b>{u['symbol']}{u['balance']:.2f}</b>\n📥 Deposited: <b>{u['symbol']}{p['deposited']:.2f}</b>\n"
+            f"🎁 Referral balance: {u['symbol']}{(u['ref_balance'] or 0):.2f} · referred {p['nrefs']}\n"
+            + ("\n<b>Top products</b>\n" + "\n".join(f"• {esc(r['product'])} × {r['n']}" for r in p["by_product"][:5]) if p["by_product"] else ""))
+
+
+def user_kb(uid):
+    url = PUBLIC_URL + f"/tg-login?next=/users/{uid}" if PUBLIC_URL.startswith("https://") else ""
+    rows = [[{"text": "📂 Full profile (website)", "web_app": {"url": url}}]] if url else []
+    rows.append([{"text": "✉️ Contact", "url": f"tg://user?id={uid}"}])
+    return {"inline_keyboard": rows}
 
 
 # ------------------------------------------------------------------ V16: broadcast (from the bot)
@@ -1851,6 +1875,21 @@ def on_message(m):
                 bc_input(chat, uid, m)
                 return
         cmd = text.split("@")[0].split()[0].lower() if text.startswith("/") else ""
+        if cmd == "/user":
+            q = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+            if not q:
+                send(chat, "Send: <code>/user 6739795427</code> or <code>/user @username</code> or <code>/user 9199...</code> (phone)")
+                return
+            rows, total = db.search_users(q, "all", "new", 5, 0)
+            if not rows:
+                send(chat, f"❌ Nobody found for <code>{esc(q)}</code>.")
+                return
+            for r in rows:
+                p = db.user_profile(r["id"])
+                send(chat, user_card(p), user_kb(r["id"]))
+            if total > len(rows):
+                send(chat, f"…and {total - len(rows)} more. Use the website Users page.")
+            return
         if cmd == "/broadcast":
             send(chat, *bc_home())
             return

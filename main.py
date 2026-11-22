@@ -153,7 +153,7 @@ if __name__ == "__main__":
     threading.Thread(target=secure.startup, daemon=True).start()      # V15: /start only for users, /admin /website for admins
     threading.Thread(target=bot.pay_watch, daemon=True).start()
     threading.Thread(target=panel.sync_loop, daemon=True).start()     # V10: keeps panel prices up to date
-    threading.Thread(target=backup.loop, args=(bot.send_doc_admin,), daemon=True).start()
+    threading.Thread(target=backup.loop, args=(bot.send_doc_admin, bot.send_doc_to), daemon=True).start()
     from waitress import serve
     threading.Thread(target=lambda: serve(web.app, host="0.0.0.0", port=int(os.getenv("PORT", "10000")), threads=8), daemon=True).start()
     bot.run()

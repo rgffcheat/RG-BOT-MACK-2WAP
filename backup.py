@@ -4,7 +4,7 @@ Primary store : a PRIVATE GitHub repo (env GH_TOKEN, GH_REPO="user/repo", option
 Secondary     : the database file is also sent to the admin on Telegram (every 6h if changed).
 Also          : download / upload-restore from the website Backup page.
 """
-import os, io, gzip, time, base64, sqlite3, hashlib, threading, traceback
+import os, io, re, gzip, time, base64, sqlite3, hashlib, threading, traceback
 import requests
 import db
 
@@ -12,7 +12,7 @@ GH_TOKEN = os.getenv("GH_TOKEN", "")
 GH_REPO = os.getenv("GH_REPO", "")
 GH_BRANCH = os.getenv("GH_BRANCH", "main")
 GH_PATH = os.getenv("GH_PATH", "backup/data.db.gz")
-STATUS = {"last_ok": 0, "last_err": "", "last_tg": 0, "size": 0}
+STATUS = {"last_ok": 0, "last_err": "", "last_tg": 0, "size": 0, "auto_err": "", "auto_retry": 0}
 _lock = threading.Lock()
 
 
@@ -122,18 +122,83 @@ def run_now(send_tg=None):
             return False, STATUS["last_err"]
 
 
-def loop(send_doc):
-    """send_doc(filename, bytes) sends a file to the admin on Telegram."""
-    time.sleep(60)
+# ------------------------------------------------------------------ V18: timer + send-to-any-chat
+# Stored in the normal settings table:  bk_chat (Telegram chat ID), bk_hours, bk_auto (1/0), bk_last (unix time)
+MIN_HOURS, MAX_HOURS = 0.25, 720
+
+
+def auto_info():
+    chat = (db.get("bk_chat", "") or "").strip()
+    try:
+        hours = float(db.get("bk_hours", "6") or 6)
+    except ValueError:
+        hours = 6.0
+    try:
+        last = int(float(db.get("bk_last", "0") or 0))
+    except ValueError:
+        last = 0
+    return {"chat": chat, "hours": hours, "on": db.get("bk_auto", "0") == "1", "last": last,
+            "next": (last + int(hours * 3600)) if last else 0}
+
+
+def save_auto(chat, hours, on):
+    """Validate + store the timer settings. Returns (ok, message)."""
+    chat = (chat or "").strip()
+    if not re.fullmatch(r"-?\d{5,20}", chat):
+        return False, "Chat ID must be a number (groups/channels start with -100...)."
+    try:
+        hours = float(hours)
+    except (TypeError, ValueError):
+        return False, "Hours must be a number, e.g. 1, 6, 12, 24 or 0.5."
+    if not (MIN_HOURS <= hours <= MAX_HOURS):
+        return False, f"Hours must be between {MIN_HOURS} and {MAX_HOURS}."
+    db.put("bk_chat", chat)
+    db.put("bk_hours", ("%g" % hours))
+    db.put("bk_auto", "1" if on else "0")
+    return True, ("Auto backup ON - every %g hour(s) to %s" % (hours, chat)) if on else "Saved. Auto backup is OFF."
+
+
+def send_backup(send_to, chat=None):
+    """Backup now (GitHub too) and send the file to the saved chat ID. send_to(chat, name, bytes) -> telegram reply dict."""
+    chat = chat or auto_info()["chat"]
+    if not chat:
+        return False, "Set a Chat ID first (Auto Backup box) and press Save."
+
+    def cb(blob):
+        r = send_to(chat, "backup_" + time.strftime("%Y%m%d_%H%M") + ".db.gz", blob)
+        if not r.get("ok"):
+            raise RuntimeError("Telegram: " + str(r.get("description", "send failed"))[:150] +
+                               " (open the bot / add it to the group or channel first)")
+        STATUS["last_tg"] = int(time.time())
+
+    ok, msg = run_now(cb)
+    return (True, "Backup sent to chat " + str(chat)) if ok else (False, msg)
+
+
+def loop(send_doc, send_to=None):
+    """send_doc(filename, bytes) -> admin chat (old behaviour); send_to(chat, filename, bytes) -> any chat."""
+    time.sleep(45)
     while True:
         try:
             if db.DIRTY["v"] and enabled() and time.time() - STATUS["last_ok"] >= 180:
                 run_now()
-            if db.DIRTY["v"] or STATUS["last_tg"] == 0:
+            a = auto_info()
+            if a["on"] and a["chat"] and send_to:
+                if time.time() >= max(a["next"], STATUS["auto_retry"]):
+                    old = db.get("bk_last", "0")
+                    db.put("bk_last", str(int(time.time())))      # saved first so the backup itself contains it
+                    ok, msg = send_backup(send_to, a["chat"])
+                    if ok:
+                        STATUS["auto_err"] = ""
+                    else:
+                        db.put("bk_last", old)
+                        STATUS["auto_err"] = msg
+                        STATUS["auto_retry"] = time.time() + 300     # try again in 5 minutes
+            elif db.DIRTY["v"] or STATUS["last_tg"] == 0:             # timer OFF: old behaviour (admin, every 6h if changed)
                 if time.time() - STATUS["last_tg"] >= 6 * 3600:
                     blob = snapshot()
                     send_doc("backup_" + time.strftime("%Y%m%d_%H%M") + ".db.gz", blob)
                     STATUS["last_tg"] = int(time.time())
         except Exception:
             traceback.print_exc()
-        time.sleep(60)
+        time.sleep(30)

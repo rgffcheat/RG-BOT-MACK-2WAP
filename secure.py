@@ -65,7 +65,8 @@ def remove_admin(uid):
 START_CMD = [{"command": "start", "description": "Open main menu ⚡"}]
 ADMIN_CMDS = START_CMD + [{"command": "admin", "description": "Open admin panel 🔨"},
                           {"command": "website", "description": "Open admin website 🌐"},
-                          {"command": "broadcast", "description": "Send broadcast 📣"}]
+                          {"command": "broadcast", "description": "Send broadcast 📣"},
+                          {"command": "user", "description": "Find a user 🔎"}]
 
 
 def sync_commands(only=None):
