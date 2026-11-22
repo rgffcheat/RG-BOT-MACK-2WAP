@@ -348,7 +348,27 @@ def menu_screen(u):
 
 def send_menu(chat, u):
     t, k = menu_screen(u)
-    send(chat, t, k)
+    return send(chat, t, k)
+
+
+def _msg_id(r):
+    """message_id from a sendMessage answer (None if it failed)"""
+    try:
+        return r["result"]["message_id"] if r and r.get("ok") else None
+    except Exception:
+        return None
+
+
+def start_flow(chat, u, start_mid=None):
+    """/start: a small 'Welcome' appears first, the main menu follows at once,
+    and as soon as the menu is on screen the Welcome message AND the user's own /start message are deleted."""
+    wid = _msg_id(send(chat, f"<b>Welcome</b>{E('party')}"))
+    r = send_menu(chat, u)
+    if _msg_id(r):                                   # menu is visible -> clean up
+        if wid:
+            api("deleteMessage", chat_id=chat, message_id=wid)
+        if start_mid:
+            api("deleteMessage", chat_id=chat, message_id=start_mid)
 
 
 def addbal_screen(u):
@@ -1552,7 +1572,10 @@ def on_message(m):
             return
         if u["verified"] and not u0["verified"]:        # phone check is OFF -> the user counts as verified now
             safe(notify_new_user, u)
-        send_menu(chat, u) if u["verified"] else ask_phone(chat)
+        if u["verified"]:
+            start_flow(chat, u, m.get("message_id"))
+        else:
+            ask_phone(chat)
         return
 
     c = m.get("contact")

@@ -23,7 +23,7 @@ PREMIUM_EMOJI = {
     "h24": "6140798460040847656",               # 🕐  24/7 Support line
     "tap": "6140856974675288623",               # 👇  Tap Product Store line
     "sale": "6140688749396238437",              # 💥  Shop Now button
-    "money": "5406683434124859552",             # 💰  Add Balance button / titles
+    "money": "6143375633691976069",             # 💰  Add Balance button / titles
     "history": "5444856076954520455",           # 📜  All History button
     "user": "6140671964664046472",              # 👤  My Profile button
     "share": "6141038776345959792",             # 🔗  Referral button

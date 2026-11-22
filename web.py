@@ -32,45 +32,123 @@ def secure_headers(r):
     r.headers["Cache-Control"] = "no-store"
     return r
 
-BASE = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ title or 'Admin' }}</title><style>
-:root{--bg:#0b0d12;--card:#141824;--line:#232a3b;--tx:#e8ecf6;--mu:#8b94ad;--ac:#5b7cff}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,Segoe UI,Roboto,sans-serif}
-nav{display:flex;gap:6px;flex-wrap:wrap;padding:12px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0}
-nav a{color:var(--mu);text-decoration:none;padding:8px 12px;border-radius:8px;font-size:14px}nav a.on,nav a:hover{background:var(--ac);color:#fff}
-main{max-width:980px;margin:0 auto;padding:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
-h1{font-size:20px;margin:4px 0 14px}h3{margin:0 0 10px}label{display:block;color:var(--mu);font-size:13px;margin:10px 0 4px}
-textarea{width:100%;padding:10px;background:#0e1220;border:1px solid var(--line);border-radius:8px;color:var(--tx);font-size:14px;font-family:monospace}
-input,select{width:100%;padding:10px;background:#0e1220;border:1px solid var(--line);border-radius:8px;color:var(--tx);font-size:14px}
-button{background:var(--ac);color:#fff;border:0;padding:10px 16px;border-radius:8px;font-size:14px;cursor:pointer;margin-top:12px}
-button.red{background:#d64545}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-.stat b{font-size:24px;display:block}.stat span{color:var(--mu);font-size:13px}table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}.tw{overflow-x:auto}
-.msg{white-space:pre-line;background:#16301f;border:1px solid #245c37;padding:10px;border-radius:8px;margin-bottom:12px}.mu{color:var(--mu);font-size:13px}
-.bd{padding:2px 8px;border-radius:99px;background:#232a3b;font-size:12px}.ok{color:#4cd07d}.no{color:#ff6b6b}.wt{color:#ffc857}a.lk{color:var(--ac);text-decoration:none}
+BASE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0c12">
+<title>{{ title or 'RG Admin' }}</title><style>
+:root{--bg:#090b11;--side:#0e1220;--card:#131826;--card2:#182036;--line:#222b41;--tx:#e9edf8;--mu:#8a94ae;--ac:#6366f1;--ac2:#8b5cf6;--ok:#34d399;--no:#f87171;--wt:#fbbf24}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--tx);font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.45;-webkit-text-size-adjust:100%}
+a{color:inherit}.app{display:flex;min-height:100vh}
+.side{width:244px;flex:none;background:var(--side);border-right:1px solid var(--line);position:sticky;top:0;height:100vh;overflow-y:auto;padding:16px 12px;z-index:30}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px;font-weight:800;font-size:16px;letter-spacing:.3px}
+.brand i{font-style:normal;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:flex;align-items:center;justify-content:center;font-size:17px}
+.grp{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mu);padding:14px 10px 6px;opacity:.8}
+.side a.nl{display:flex;align-items:center;gap:10px;color:#b7bfd6;text-decoration:none;padding:9px 10px;border-radius:10px;font-size:14px;margin-bottom:2px}
+.side a.nl:hover{background:var(--card2);color:#fff}.side a.nl.on{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff;font-weight:600;box-shadow:0 6px 18px #6366f144}
+.side a.nl span{width:22px;text-align:center}.side .out{margin-top:16px;border-top:1px solid var(--line);padding-top:10px}
+.content{flex:1;min-width:0}.top{display:none}
+main{max-width:1020px;margin:0 auto;padding:22px 20px 90px}
+h1{font-size:22px;margin:2px 0 16px;font-weight:800;letter-spacing:.2px}h3{margin:0 0 10px;font-size:15px;font-weight:700}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}.ph h1{margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 1px 0 #ffffff08 inset}
+label{display:block;color:var(--mu);font-size:12.5px;margin:12px 0 5px;font-weight:500}
+textarea,input,select{width:100%;padding:10px 12px;background:#0c101c;border:1px solid var(--line);border-radius:10px;color:var(--tx);font-size:14px;font-family:inherit;outline:0;transition:border .15s,box-shadow .15s}
+textarea{font-family:ui-monospace,Menlo,Consolas,monospace}
+textarea:focus,input:focus,select:focus{border-color:var(--ac);box-shadow:0 0 0 3px #6366f133}
+input[type=checkbox]{width:18px!important;height:18px;padding:0;accent-color:var(--ac);vertical-align:middle;flex:none}
+button{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff;border:0;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px;font-family:inherit;transition:transform .08s,opacity .15s,filter .15s}
+button:hover{filter:brightness(1.1)}button:active{transform:scale(.97)}button[disabled]{opacity:.55;cursor:wait}
+button.red{background:linear-gradient(135deg,#ef4444,#dc2626)}button.sec{background:var(--card2);border:1px solid var(--line);color:var(--tx)}button.grn{background:linear-gradient(135deg,#10b981,#059669)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}.grid .card{margin:0}
+.stat{position:relative;overflow:hidden}.stat b{font-size:28px;display:block;font-weight:800;margin-top:2px}.stat span{color:var(--mu);font-size:12.5px}
+.stat i{font-style:normal;position:absolute;right:14px;top:12px;font-size:24px;opacity:.9}
+table{width:100%;border-collapse:collapse;font-size:13px}th{color:var(--mu);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px}
+td,th{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}tr:last-child td{border-bottom:0}tbody tr:hover td,table tr:hover td{background:#ffffff05}.tw{overflow-x:auto}
+.mu{color:var(--mu);font-size:13px}.bd{padding:3px 10px;border-radius:99px;background:var(--card2);font-size:12px;display:inline-block}
+.ok{color:var(--ok)}.no{color:var(--no)}.wt{color:var(--wt)}a.lk{color:#8b9dff;text-decoration:none}a.lk:hover{text-decoration:underline}
+.bd.ok{background:#10b9811f}.bd.no{background:#ef44441f}.bd.wt{background:#fbbf2420}
 .row{display:flex;gap:8px;align-items:center}.row input{flex:1}
+.flash{display:none}
+#toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:99;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(94vw,520px);pointer-events:none}
+.toast{pointer-events:auto;background:#0f2a1f;border:1px solid #1f6b47;color:#d9ffe9;padding:12px 16px;border-radius:12px;box-shadow:0 10px 30px #000a;white-space:pre-line;width:100%;animation:up .25s;cursor:pointer;font-size:14px}
+.toast.bad{background:#321416;border-color:#7a2a2f;color:#ffdede}.toast.out{opacity:0;transform:translateY(8px);transition:.3s}@keyframes up{from{opacity:0;transform:translateY(12px)}}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.chip{padding:7px 13px;border-radius:99px;background:var(--card);border:1px solid var(--line);color:#b7bfd6;text-decoration:none;font-size:13px;white-space:nowrap}
+.chip b{color:var(--mu);font-weight:600;margin-left:4px}.chip:hover{border-color:var(--ac);color:#fff}.chip.on{background:linear-gradient(135deg,var(--ac),var(--ac2));border-color:transparent;color:#fff}.chip.on b{color:#e5e7ff}
+.bar{position:sticky;top:0;z-index:20;background:#101628ee;backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar select,.bar input[type=search]{width:auto;min-width:150px;flex:1}.bar button{margin:0;padding:9px 14px}.chk{display:flex;align-items:center;gap:8px;margin:0;color:var(--tx);font-size:14px;cursor:pointer;white-space:nowrap}
+.pick{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer;margin-top:0;color:var(--tx);font-size:15px}
+.pick:hover{border-color:var(--ac)}.pick.sel{background:#1a2142;border-color:var(--ac)}.pick .mu{margin-left:auto;font-size:12px;white-space:nowrap}
+.savebar{position:sticky;bottom:0;z-index:20;padding:12px 0 2px;background:linear-gradient(transparent,var(--bg) 40%)}.savebar button{margin:0;width:100%;padding:13px;font-size:15px}
+.jump{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.jump a{padding:6px 12px;border-radius:99px;background:var(--card);border:1px solid var(--line);color:#b7bfd6;text-decoration:none;font-size:12.5px}.jump a:hover{border-color:var(--ac);color:#fff}
+.card[id]{scroll-margin-top:12px}details.card>summary{cursor:pointer;font-weight:600}
+code{background:#0c101c;border:1px solid var(--line);padding:1px 6px;border-radius:6px;font-size:12.5px;word-break:break-all}
+.qa{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.qa a{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:12px;text-decoration:none;color:var(--tx);font-weight:600}.qa a:hover{border-color:var(--ac)}
+@media(max-width:900px){
+.side{position:fixed;left:0;top:0;transform:translateX(-102%);transition:transform .22s;box-shadow:0 0 60px #000}
+body.nav .side{transform:none}body.nav:after{content:"";position:fixed;inset:0;background:#000a;z-index:25}
+.top{display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;background:#0e1220f2;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 14px;font-weight:700}
+.top button{margin:0;padding:7px 12px;font-size:18px;background:var(--card2);border:1px solid var(--line)}
+main{padding:16px 14px 90px}h1{font-size:19px}.bar{top:54px}}
 </style></head><body>
-{% if session.get('ok') %}<nav>
-<a href="/" class="{{ 'on' if tab=='home' }}">Dashboard</a>
-<a href="/products" class="{{ 'on' if tab=='products' }}">Products</a><a href="/categories" class="{{ 'on' if tab=='categories' }}">Categories</a><a href="/panel" class="{{ 'on' if tab=='panel' }}">Panel API</a><a href="/deposits" class="{{ 'on' if tab=='deposits' }}">Deposits</a><a href="/payments" class="{{ 'on' if tab=='payments' }}">QR Payments</a><a href="/find" class="{{ 'on' if tab=='find' }}">Find Order</a><a href="/coupons" class="{{ 'on' if tab=='coupons' }}">Coupons</a>
-<a href="/orders" class="{{ 'on' if tab=='orders' }}">Orders</a><a href="/users" class="{{ 'on' if tab=='users' }}">Users</a>
-<a href="/broadcast" class="{{ 'on' if tab=='broadcast' }}">Broadcast</a><a href="/backup" class="{{ 'on' if tab=='backup' }}">Backup</a>
-<a href="/botcfg" class="{{ 'on' if tab=='botcfg' }}">Bot Token</a><a href="/settings" class="{{ 'on' if tab=='settings' }}">Settings</a>
-<a href="/logout" style="margin-left:auto">Logout</a></nav>{% endif %}
-<main>{% for m in get_flashed_messages() %}<div class="msg">{{ m }}</div>{% endfor %}{% block body %}{% endblock %}</main></body></html>"""
+{% if session.get('ok') %}{% set nav = [('Overview',[('home','/','📊','Dashboard')]),('Store',[('products','/products','🛍️','Products'),('categories','/categories','🗂️','Categories'),('panel','/panel','🔌','Panel API'),('coupons','/coupons','🎟️','Coupons')]),('Sales',[('orders','/orders','🧾','Orders'),('payments','/payments','💳','QR Payments'),('deposits','/deposits','💰','Deposits'),('find','/find','🔎','Find Order')]),('Customers',[('users','/users','👥','Users'),('broadcast','/broadcast','📣','Broadcast')]),('System',[('settings','/settings','⚙️','Settings'),('botcfg','/botcfg','🤖','Bot Token'),('backup','/backup','💾','Backup')])] %}
+<div class="app"><aside class="side"><div class="brand"><i>🎮</i><span>RG Admin</span></div>
+{% for g, items in nav %}<div class="grp">{{ g }}</div>{% for k, u, ic, nm in items %}<a class="nl {{ 'on' if tab==k }}" href="{{ u }}"><span>{{ ic }}</span>{{ nm }}</a>{% endfor %}{% endfor %}
+<div class="out"><a class="nl" href="/logout"><span>🚪</span>Logout</a></div></aside>
+<div class="content"><header class="top"><button type="button" onclick="document.body.classList.toggle('nav')">☰</button><span>RG Admin</span></header>{% endif %}
+<main>{% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}{% block body %}{% endblock %}</main>
+{% if session.get('ok') %}</div></div>{% endif %}
+<div id="toasts"></div>
+<script>
+(function(){
+var T=document.getElementById('toasts');
+function toast(t){if(!t)return;var d=document.createElement('div');var bad=t.indexOf('❌')===0||t.indexOf('⚠')===0;d.className='toast'+(bad?' bad':'');d.textContent=t;T.appendChild(d);
+ var k=function(){d.classList.add('out');setTimeout(function(){d.remove()},300)};setTimeout(k,bad?7000:4500);d.onclick=k}
+function eat(root){var out=[];root.querySelectorAll('.flash').forEach(function(e){out.push(e.textContent.trim());e.remove()});return out}
+function jump(){var h=document.querySelector('[data-jump]');if(!h)return;var cs=document.querySelectorAll('main form .card>h3, main form details.card>summary');if(cs.length<3)return;
+ var box=document.createElement('div');box.className='jump';cs.forEach(function(x,i){var c=x.parentNode;if(!c.id)c.id='sec'+i;var a=document.createElement('a');a.href='#'+c.id;a.textContent=x.textContent.replace(/[(][0-9]+[)]/,'').trim();box.appendChild(a)});h.replaceWith(box)}
+try{var s=sessionStorage.getItem('rg_toast');if(s){sessionStorage.removeItem('rg_toast');JSON.parse(s).forEach(toast)}}catch(e){}
+eat(document).forEach(toast);jump();
+function same(a,b){try{var x=new URL(a,location.href),y=new URL(b,location.href);return x.pathname===y.pathname&&x.search===y.search}catch(e){return false}}
+function swap(doc){var nm=doc.querySelector('main'),cm=document.querySelector('main');if(!nm||!cm){location.reload();return}
+ var y=window.scrollY;eat(nm);cm.innerHTML=nm.innerHTML;
+ cm.querySelectorAll('script').forEach(function(o){var n=document.createElement('script');n.text=o.textContent;o.replaceWith(n)});jump();window.scrollTo(0,y)}
+function busy(b,on){if(!b)return;if(on){b.dataset.t=b.textContent;b.disabled=true;if(b.textContent.length<40)b.textContent='⏳ '+b.textContent}else{b.disabled=false;if(b.dataset.t)b.textContent=b.dataset.t}}
+document.addEventListener('submit',function(e){
+ var f=e.target;if(!f||f.tagName!=='FORM'||e.defaultPrevented)return;
+ if((f.method||'').toLowerCase()!=='post'||f.hasAttribute('data-full')||(f.enctype||'').indexOf('multipart')>=0)return;
+ e.preventDefault();if(f.dataset.busy)return;
+ var sb=e.submitter,fd;try{fd=new FormData(f,sb)}catch(x){fd=new FormData(f);if(sb&&sb.name)fd.append(sb.name,sb.value)}
+ var url=(sb&&sb.getAttribute('formaction'))?sb.formAction:(f.getAttribute('action')?f.action:location.href);
+ f.dataset.busy='1';busy(sb,true);
+ fetch(url,{method:'POST',body:fd,credentials:'same-origin',headers:{'X-Requested-With':'fetch'}})
+ .then(function(r){return r.text().then(function(h){return{u:r.url,h:h,ok:r.ok}})})
+ .then(function(x){var doc=new DOMParser().parseFromString(x.h,'text/html');
+  if(!x.ok&&!doc.querySelector('main')){toast('❌ Session expired or bad request - reload the page and try again.');return}
+  if(same(x.u,location.href)){var m=eat(doc);swap(doc);m.forEach(toast)}
+  else{try{sessionStorage.setItem('rg_toast',JSON.stringify(eat(doc)))}catch(_){}location.href=x.u}})
+ .catch(function(){toast('❌ Network problem - nothing was lost, try again.')})
+ .then(function(){delete f.dataset.busy;busy(sb,false)});
+});
+document.addEventListener('click',function(e){if(document.body.classList.contains('nav')&&!e.target.closest('.side,.top'))document.body.classList.remove('nav')});
+})();
+</script></body></html>"""
+
 
 LOGIN = """{% extends 'base.html' %}{% block body %}<div class="card" style="max-width:360px;margin:60px auto">
-<h1>Admin Login</h1><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">
+<h1>Admin Login</h1><form method="post" data-full="1"><input type="hidden" name="csrf" value="{{ csrf() }}">
 <label>Username</label><input name="u" autocomplete="username"><label>Password</label><input name="p" type="password" autocomplete="current-password">
 <button style="width:100%">Login</button></form></div>{% endblock %}"""
 
-HOME = """{% extends 'base.html' %}{% block body %}<h1>Dashboard</h1><div class="grid">
-<div class="card stat"><b>{{ s.users }}</b><span>Total users</span></div><div class="card stat"><b>{{ s.ver }}</b><span>Verified</span></div>
-<div class="card stat"><b>{{ s.orders }}</b><span>Orders</span></div><div class="card stat"><b>{{ '%.2f'|format(s.bal) }}</b><span>Total wallet balance</span></div>
-<div class="card stat"><b><a class="lk" href="/payments">{{ s.pend }}</a></b><span>Deposits to review</span></div>
-<div class="card stat"><b>{{ s.stock }}</b><span>Keys in stock</span></div>
-<div class="card stat"><b>{{ s.o_today }}</b><span>Orders today</span></div><div class="card stat"><b>{{ s.u_today }}</b><span>New users today</span></div></div>
-<div class="card"><h3>Bot status</h3><p class="mu">All parts live: shop, order summary, Pay QR + auto payment page, Pay UPI / Pay Binance (manual approve), coupons, wallet top-up, backup/restore, broadcast, referral commission, maintenance mode, login protection.</p></div>{% endblock %}"""
+HOME = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Dashboard</h1></div><div class="grid">
+<div class="card stat"><i>👥</i><b>{{ s.users }}</b><span>Total users</span></div><div class="card stat"><i>✅</i><b>{{ s.ver }}</b><span>Verified</span></div>
+<div class="card stat"><i>🧾</i><b>{{ s.orders }}</b><span>Orders</span></div><div class="card stat"><i>👛</i><b>₹{{ '%.2f'|format(s.bal) }}</b><span>Total wallet balance</span></div>
+<div class="card stat"><i>⏳</i><b><a class="lk" href="/payments">{{ s.pend }}</a></b><span>Deposits to review</span></div>
+<div class="card stat"><i>🔑</i><b>{{ s.stock }}</b><span>Keys in stock</span></div>
+<div class="card stat"><i>📈</i><b>{{ s.o_today }}</b><span>Orders today</span></div><div class="card stat"><i>🆕</i><b>{{ s.u_today }}</b><span>New users today</span></div></div>
+<div class="card" style="margin-top:16px"><h3>Quick actions</h3><div class="qa">
+<a href="/products/new">➕ Add product</a><a href="/products">🛍️ Products</a><a href="/categories">🗂️ Categories</a><a href="/panel/products">🔌 Panel products</a>
+<a href="/orders">🧾 Orders</a><a href="/users">👥 Users</a><a href="/broadcast">📣 Broadcast</a><a href="/settings">⚙️ Settings</a></div></div>
+<div class="card"><h3>Connections</h3><p style="margin:0">Panel API: <span class="bd {{ 'ok' if gs('panel_connected')=='1' else 'no' }}">{{ 'Connected' if gs('panel_connected')=='1' else 'Not connected' }}</span>
+&nbsp; Payment gateway: <span class="bd {{ 'ok' if gs('gw_connected')=='1' else 'no' }}">{{ 'Connected' if gs('gw_connected')=='1' else 'Not connected' }}</span>
+&nbsp; Maintenance: <span class="bd {{ 'wt' if gs('maint')=='1' else 'ok' }}">{{ 'ON' if gs('maint')=='1' else 'OFF' }}</span></p></div>{% endblock %}"""
 
 EMOJIS = """{% extends 'base.html' %}{% block body %}<h1>Premium Emoji</h1>
 <div class="card"><p class="mu"><b>How to get an emoji ID:</b> open the bot with your admin Telegram account (Premium) and send any premium emoji as a message.
@@ -90,7 +168,7 @@ Emoji for products and plans are set in the <a class="lk" href="/products">Produ
 </table></div></details>{% endfor %}
 <button>Save all</button></form>{% endblock %}"""
 
-SETTINGS = """{% extends 'base.html' %}{% block body %}<h1>Settings</h1><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">
+SETTINGS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Settings</h1></div><div data-jump></div><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">
 <div class="card"><h3>Store</h3><label>Shop name (main menu title)</label><input name="shop_name" value="{{ gs('shop_name') }}">
 <label>Minimum deposit</label><input name="min_dep" value="{{ gs('min_dep') }}"><label>Maximum deposit</label><input name="max_dep" value="{{ gs('max_dep') }}">
 <label>Referral reward (when friend verifies phone)</label><input name="ref_reward" value="{{ gs('ref_reward') }}"></div>
@@ -147,7 +225,7 @@ Or write <code>🔥{6141106778563158041}</code> (emoji + <b>{premium ID}</b>) to
 <textarea name="binance_text" rows="4">{{ gs('binance_text') }}</textarea></div>
 <div class="card"><h3>Links</h3><label>Tutorial video link (Watch Guide Video)</label><input name="tutorial_url" value="{{ gs('tutorial_url') }}" placeholder="https://youtube.com/...">
 <label>All Update File link</label><input name="update_url" value="{{ gs('update_url') }}" placeholder="https://t.me/... or drive link"></div>
-<button>Save settings</button></form>{% endblock %}"""
+<div class="savebar"><button>Save settings</button></div></form>{% endblock %}"""
 
 USERS = """{% extends 'base.html' %}{% block body %}<h1>Users</h1><form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Search ID / name / phone"><button style="margin:0">Search</button></form><br>
 <div class="card tw"><table><tr><th>ID</th><th>Name</th><th>Phone</th><th>Balance</th><th>Account type</th><th>Actions</th></tr>
@@ -158,8 +236,24 @@ USERS = """{% extends 'base.html' %}{% block body %}<h1>Users</h1><form class="r
 <button name="a" value="role" style="margin:0">{{ 'Make user' if u.role=='reseller' else 'Make reseller' }}</button>
 <button name="a" value="ban" class="red" style="margin:0">{{ 'Unban' if u.banned else 'Ban' }}</button></form></td></tr>{% endfor %}</table></div>{% endblock %}"""
 
-PRODUCTS = """{% extends 'base.html' %}{% block body %}<h1>Products</h1>
-<p><a class="lk" href="/products/new"><button type="button">+ Add product</button></a></p>
+PRODUCTS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Products</h1><a href="/products/new"><button type="button" style="margin:0">+ Add product</button></a></div>
+<div class="chips"><a class="chip {{ 'on' if cf=='all' }}" href="/products">All <b>{{ n_all }}</b></a>{% for c in cats() %}<a class="chip {{ 'on' if cf==c.id|string }}" href="/products?cat={{ c.id }}">{{ c.name }} <b>{{ c.nprod }}</b></a>{% endfor %}<a class="chip {{ 'on' if cf=='none' }}" href="/products?cat=none">No category <b>{{ n_none }}</b></a></div>
+<form id="bulk" method="post" action="/products/bulk"><input type="hidden" name="csrf" value="{{ csrf() }}"></form>
+<div class="bar"><label class="chk"><input type="checkbox" id="selall"> Select all</label><span class="mu" id="cnt">0 selected</span>
+<input type="search" id="q" placeholder="Search product..." autocomplete="off">
+<select name="cat_id" form="bulk"><option value="">Move selected to category...</option><option value="0">- no category -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+<button form="bulk" name="a" value="move">Move</button><button form="bulk" name="a" value="show" class="sec">Show</button><button form="bulk" name="a" value="hide" class="sec">Hide</button></div>
+<div class="card tw"><table id="ptab"><tr><th></th><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Status</th><th></th></tr>
+{% for p in rows %}<tr data-n="{{ p.name|lower }}"><td><input class="pc" type="checkbox" name="pid" value="{{ p.id }}" form="bulk"></td><td><a class="lk" href="/products/{{ p.id }}"><b>{{ p.name }}</b></a></td>
+<td><form method="post" action="/products/{{ p.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="setcat"><select name="cat_id" style="min-width:140px" onchange="this.form.requestSubmit()"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select></form></td>
+<td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td><span class="bd {{ 'ok' if p.active else 'no' }}">{{ 'Visible' if p.active else 'Hidden' }}</span></td><td><a class="lk" href="/products/{{ p.id }}">Open</a></td></tr>{% endfor %}
+{% if not rows %}<tr><td colspan="7" class="mu">No products here.</td></tr>{% endif %}</table></div>
+<script>(function(){var all=document.getElementById('selall'),cnt=document.getElementById('cnt'),q=document.getElementById('q');
+function vis(){return [].filter.call(document.querySelectorAll('#ptab tr[data-n]'),function(r){return r.style.display!=='none'})}
+function upd(){var n=document.querySelectorAll('.pc:checked').length;cnt.textContent=n+' selected'}
+all.onchange=function(){vis().forEach(function(r){r.querySelector('.pc').checked=all.checked});upd()};
+document.querySelectorAll('.pc').forEach(function(c){c.onchange=upd});
+q.oninput=function(){var s=q.value.toLowerCase().trim();document.querySelectorAll('#ptab tr[data-n]').forEach(function(r){r.style.display=r.getAttribute('data-n').indexOf(s)>=0?'':'none'})};})();</script>
 <div class="card"><h3>Premium emoji for products &amp; plans</h3>
 <p class="mu">Paste a premium emoji ID (send the emoji to the bot to get it). <b>One emoji for all products</b> / <b>one emoji for all plans</b> is used everywhere automatically.
 An emoji set on a single product (open the product) wins over the "all products" emoji.</p>
@@ -167,11 +261,23 @@ An emoji set on a single product (open the product) wins over the "all products"
 <label>One emoji for ALL products</label><input name="emoji_all_products" value="{{ gs('emoji_all_products') }}" inputmode="numeric" placeholder="premium emoji ID" autocomplete="off">
 <label>One emoji for ALL plans (A to Z)</label><input name="emoji_all_plans" value="{{ gs('emoji_all_plans') }}" inputmode="numeric" placeholder="premium emoji ID" autocomplete="off">
 <button name="a" value="save">Save</button>
-<button name="a" value="apply" class="red" onclick="return confirm('Remove every single-product emoji so the ONE emoji is used for all products?')">Save &amp; use for ALL products</button></form></div>
-<div class="card tw"><table><tr><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Emoji ID</th><th>Status</th><th></th></tr>
-{% for p in rows %}<tr><td><a class="lk" href="/products/{{ p.id }}">{{ p.name }}</a></td>
-<td><form method="post" action="/products/{{ p.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="setcat"><select name="cat_id" style="min-width:130px" onchange="this.form.submit()"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select></form></td><td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td class="mu">{{ p.emoji_id or ('(all-products emoji)' if gs('emoji_all_products') else '-') }}</td>
-<td>{{ 'Visible' if p.active else 'Hidden' }}</td><td><a class="lk" href="/products/{{ p.id }}">Open</a></td></tr>{% endfor %}</table></div>{% endblock %}"""
+<button name="a" value="apply" class="red" onclick="return confirm('Remove every single-product emoji so the ONE emoji is used for all products?')">Save &amp; use for ALL products</button></form></div>{% endblock %}"""
+
+ASSIGN = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>{{ c.name }} &middot; choose products</h1><a class="lk" href="/categories">&larr; Categories</a></div>
+<p class="mu" style="margin-top:-6px">Tick every product that should be inside <b>{{ c.name }}</b>, then press the Save button. Unticked products leave this category.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">
+<div class="bar"><label class="chk"><input type="checkbox" id="selall"> Select all</label><span class="mu" id="cnt"></span><input type="search" id="q" placeholder="Search product..." autocomplete="off"></div>
+{% for p in rows %}<label class="pick {{ 'sel' if p.cat_id==c.id }}" data-n="{{ p.name|lower }}"><input class="pc" type="checkbox" name="pid" value="{{ p.id }}" {{ 'checked' if p.cat_id==c.id }}><span>{{ p.name }}</span>
+<span class="mu">{% if p.cat_id and p.cat_id!=c.id and names.get(p.cat_id) %}now in: {{ names.get(p.cat_id) }}{% elif not p.active %}hidden{% endif %}</span></label>{% endfor %}
+{% if not rows %}<div class="card mu">No products yet.</div>{% endif %}
+<div class="savebar"><button id="sv">Save</button></div></form>
+<script>(function(){var all=document.getElementById('selall'),cnt=document.getElementById('cnt'),q=document.getElementById('q'),sv=document.getElementById('sv');
+function rows(){return [].filter.call(document.querySelectorAll('.pick'),function(r){return r.style.display!=='none'})}
+function upd(){var n=document.querySelectorAll('.pc:checked').length;cnt.textContent=n+' selected';sv.textContent='Save ('+n+' selected)';
+ document.querySelectorAll('.pick').forEach(function(r){r.classList.toggle('sel',r.querySelector('.pc').checked)})}
+all.onchange=function(){rows().forEach(function(r){r.querySelector('.pc').checked=all.checked});upd()};
+document.querySelectorAll('.pc').forEach(function(c){c.onchange=upd});
+q.oninput=function(){var s=q.value.toLowerCase().trim();document.querySelectorAll('.pick').forEach(function(r){r.style.display=r.getAttribute('data-n').indexOf(s)>=0?'':'none'})};upd();})();</script>{% endblock %}"""
 
 PRODUCT = """{% extends 'base.html' %}{% block body %}<h1>{{ p.name }}</h1>
 <div class="card"><h3>Product</h3>{% if p.api_pid %}<p class="mu">Connected to panel product <b>#{{ p.api_pid }}</b> - keys are bought from the panel automatically. Prices follow the Panel API percentages unless you edit a price by hand.</p>{% endif %}<form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="edit">
@@ -253,7 +359,7 @@ The customer taps a category and sees only the products of that category. Make a
 <td><input name="name" value="{{ c.name }}" style="min-width:150px"></td><td><input name="emoji" value="{{ c.emoji }}" style="width:60px"></td>
 <td><input name="eid" value="{{ c.eid }}" inputmode="numeric" style="min-width:150px" autocomplete="off"></td><td><input name="sort" value="{{ c.sort }}" style="width:60px"></td>
 <td><select name="active"><option value="1" {{ 'selected' if c.active }}>Yes</option><option value="0" {{ 'selected' if not c.active }}>No</option></select></td><td>{{ c.nprod }}</td>
-<td><button name="a" value="save" style="margin:0">Save</button> <button name="a" value="del" class="red" style="margin:0" onclick="return confirm('Delete this category? Its products are kept (they move to the other button).')">X</button></td></form></tr>{% endfor %}
+<td style="white-space:nowrap"><button name="a" value="save" style="margin:0">Save</button> <a href="/categories/{{ c.id }}/assign"><button type="button" class="grn" style="margin:0">Products</button></a> <button name="a" value="del" class="red" style="margin:0" onclick="return confirm('Delete this category? Its products are kept (they move to the other button).')">X</button></td></form></tr>{% endfor %}
 {% if not rows %}<tr><td colspan="7" class="mu">No category yet.</td></tr>{% endif %}</table></div>
 <div class="card"><h3>Category screen text</h3><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="text">
 <label>Title (empty = shop name)</label><input name="cat_title" value="{{ gs('cat_title') }}" placeholder="{{ gs('shop_name') }}">
@@ -264,7 +370,7 @@ The customer taps a category and sees only the products of that category. Make a
 NEWPRODUCT = '{% extends \'base.html\' %}{% block body %}<h1>Add product</h1>\n<div class="card"><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Product name</label><input name="name" required placeholder="e.g. Br Mods Pc Emulator">\n<label>Update group link (Join Telegram button after purchase) - optional</label><input name="link" placeholder="https://t.me/yourgroup">\n<label>Premium emoji ID for this product - optional</label><input name="emoji_id" inputmode="numeric" placeholder="premium emoji ID">\n<label>Category - optional</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>\n<h3>Plans</h3><p class="mu">Duration + Hours/Days, then User price and Reseller price (INR). Press <b>+ Add another plan</b> for more. Reseller price empty = same as user price.</p>\n<div id="rows"></div><button type="button" onclick="addRow()" style="margin:6px 0">+ Add another plan</button>\n<script>function addRow(){var d=document.createElement(\'div\');d.className=\'row\';d.style.cssText=\'flex-wrap:wrap;gap:6px;margin:8px 0\';\nd.innerHTML=\'<input name="dur" type="number" min="1" step="1" placeholder="Duration" style="width:95px;flex:none" required><select name="unit" style="width:95px;flex:none"><option value="hours">Hours</option><option value="days" selected>Days</option></select><input name="uprice" placeholder="User price" style="width:110px;flex:none" required><input name="rprice" placeholder="Reseller price" style="width:125px;flex:none"><button type="button" class="red" style="margin:0" onclick="this.parentNode.remove()">X</button>\';\ndocument.getElementById(\'rows\').appendChild(d)}addRow();</script>\n<button>Save product</button></form></div>{% endblock %}'
 FIND = '{% extends \'base.html\' %}{% block body %}<h1>Find order</h1>\n<form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Order ID (ORD… / WAL…), transaction ID or user ID" autofocus><button style="margin:0">Find user</button></form><br>\n{% if q and not hits %}<div class="card">Nothing found for <b>{{ q }}</b>.</div>{% endif %}\n{% for h in hits %}<div class="card"><h3>{{ h.kind }}</h3>\n<p><b>Order ID:</b> {{ h.ref }}</p>\n{% for k, v in h.info %}<p class="mu">{{ k }}: <b>{{ v }}</b></p>{% endfor %}\n<p><b>User:</b> {{ h.uname or \'-\' }} · <b>ID:</b> {{ h.uid }} · <b>Username:</b> {{ (\'@\' + h.username) if h.username else \'-\' }}<br><b>Phone:</b> {{ h.phone or \'-\' }} · <b>Wallet:</b> ₹{{ \'%.2f\'|format(h.balance) }}</p>\n<a class="lk" href="/users?q={{ h.uid }}">Open user</a></div>{% endfor %}{% endblock %}'
 PANEL = '{% extends \'base.html\' %}{% block body %}<h1>Panel API</h1>\n<div class="card"><h3>1. Connect to your panel</h3>\n<p class="mu">Paste the API token of your main website and press <b>Save &amp; Connect</b>. You can change the token or the server URL any time.</p>\n<form method="post" action="/panel/connect"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Server URL</label><input name="panel_url" value="{{ gs(\'panel_url\') or default_url }}">\n<label>API token</label><input name="panel_token" value="{{ gs(\'panel_token\') }}" autocomplete="off" placeholder="paste API token">\n<button>Save &amp; Connect</button> <button type="submit" formaction="/panel/balance">Check Balance</button>\n<a class="lk" href="/panel/products"><button type="button">Show Products</button></a></form>\n<p class="mu">Status: <b class="{{ \'ok\' if gs(\'panel_connected\')==\'1\' else \'no\' }}">{{ \'Connected\' if gs(\'panel_connected\')==\'1\' else (\'Token saved - press Save & Connect\' if gs(\'panel_token\') else \'Not connected\') }}</b></p></div>\n<div class="card"><h3>2. Your prices (percentage on the panel price)</h3>\n<p class="mu">Every product you add gets its prices automatically: <b>panel price + your %</b>. Change the % and press <b>Save &amp; apply</b> - all products are updated at once, no need to edit each price.</p>\n<form method="post" action="/panel/markup"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Reseller % (reseller price = panel price + this %)</label><input name="mk_reseller" value="{{ rp }}">\n<label>User % (user price = panel price + this %)</label><input name="mk_user" value="{{ up }}">\n<p class="mu">Example: panel price ₹100 &rarr; reseller <b>₹{{ \'%.2f\'|format(ex_r) }}</b> &middot; user <b>₹{{ \'%.2f\'|format(ex_u) }}</b></p>\n<button name="a" value="save">Save %</button>\n<button name="a" value="apply" class="red" onclick="return confirm(\'Recalculate the price of ALL panel products with these percentages? Prices you edited by hand are overwritten too.\')">Save &amp; apply to ALL products</button></form></div>\n<div class="card"><h3>3. Your panel products</h3>\n<p class="mu">In the shop: <b>{{ np }}</b> panel product(s), <b>{{ nl }}</b> plan(s). Press <b>Show Products</b> above to see everything on your panel and add the ones you want (or all).</p>\n<form method="post" action="/panel/auto"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Auto price sync (keeps panel prices up to date, then applies your %)</label>\n<select name="panel_autosync"><option value="1" {{ \'selected\' if gs(\'panel_autosync\')!=\'0\' }}>ON</option><option value="0" {{ \'selected\' if gs(\'panel_autosync\')==\'0\' }}>OFF</option></select>\n<label>Sync every (minutes, 5 - 1440)</label><input name="panel_sync_min" value="{{ gs(\'panel_sync_min\') }}">\n<button>Save</button> <button type="submit" formaction="/panel/sync">Sync prices now</button></form>\n<p class="mu">Last sync: {{ (gs(\'panel_last_sync\')|int)|ts if gs(\'panel_last_sync\')|int else \'never\' }}</p></div>{% endblock %}'
-PANELPROD = '{% extends \'base.html\' %}{% block body %}<h1>Panel products</h1>\n<p class="mu"><a class="lk" href="/panel">&larr; back to Panel API</a> &middot; Percentages now: reseller <b>+{{ rp }}%</b>, user <b>+{{ up }}%</b></p>\n<form method="post" action="/panel/add"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<div class="card"><button name="a" value="selected" style="margin:0">Add selected</button> <button name="a" value="all" class="red" style="margin:0" onclick="return confirm(\'Add ALL {{ rows|length }} products?\')">Add ALL products</button>\n<label style="margin-top:12px"><input type="checkbox" style="width:auto" onclick="document.querySelectorAll(\'.pc\').forEach(function(x){x.checked=this.checked}.bind(this))"> Select all</label></div>\n{% for r in rows %}<div class="card"><label style="margin:0;color:var(--tx);font-size:15px"><input class="pc" type="checkbox" name="pid" value="{{ r.id }}" style="width:auto"> <b>{{ r.name }}</b> <span class="mu">(panel #{{ r.id }})</span> {% if r.added %}<span class="bd ok">Added</span>{% endif %}</label>\n<div class="tw"><table><tr><th>Plan</th><th>Panel price</th><th>Reseller price</th><th>User price</th></tr>\n{% for pl in r.plans %}<tr><td>{{ pl.name }}</td><td>₹{{ \'%.2f\'|format(pl.base) }}</td><td>₹{{ \'%.2f\'|format(pl.res) }}</td><td>₹{{ \'%.2f\'|format(pl.usr) }}</td></tr>{% endfor %}</table></div></div>{% endfor %}\n{% if not rows %}<div class="card">No products found on the panel.</div>{% endif %}</form>{% endblock %}'
+PANELPROD = '{% extends \'base.html\' %}{% block body %}<h1>Panel products</h1>\n<p class="mu"><a class="lk" href="/panel">&larr; back to Panel API</a> &middot; Percentages now: reseller <b>+{{ rp }}%</b>, user <b>+{{ up }}%</b></p>\n<form method="post" action="/panel/add"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<div class="card"><label style="margin-top:0">Put new products into category (only products without a category are changed)</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select><button name="a" value="selected">Add selected</button> <button name="a" value="all" class="red" onclick="return confirm(\'Add ALL {{ rows|length }} products?\')">Add ALL products</button>\n<label style="margin-top:12px"><input type="checkbox" style="width:auto" onclick="document.querySelectorAll(\'.pc\').forEach(function(x){x.checked=this.checked}.bind(this))"> Select all</label></div>\n{% for r in rows %}<div class="card"><label style="margin:0;color:var(--tx);font-size:15px"><input class="pc" type="checkbox" name="pid" value="{{ r.id }}" style="width:auto"> <b>{{ r.name }}</b> <span class="mu">(panel #{{ r.id }})</span> {% if r.added %}<span class="bd ok">Added</span>{% endif %}</label>\n<div class="tw"><table><tr><th>Plan</th><th>Panel price</th><th>Reseller price</th><th>User price</th></tr>\n{% for pl in r.plans %}<tr><td>{{ pl.name }}</td><td>₹{{ \'%.2f\'|format(pl.base) }}</td><td>₹{{ \'%.2f\'|format(pl.res) }}</td><td>₹{{ \'%.2f\'|format(pl.usr) }}</td></tr>{% endfor %}</table></div></div>{% endfor %}\n{% if not rows %}<div class="card">No products found on the panel.</div>{% endif %}</form>{% endblock %}'
 BOTCFG = """{% extends 'base.html' %}{% block body %}<h1>Bot Token &amp; Admin</h1>
 <div class="card"><h3>Status</h3><p>Bot: <b class="{{ 'ok' if running else 'no' }}">{{ status }}</b></p>
 <p class="mu">Telegram bot token: <b>{{ tok }}</b> &nbsp;·&nbsp; Admin ID: <b>{{ admin }}</b></p></div>
@@ -279,7 +385,7 @@ BOTCFG = """{% extends 'base.html' %}{% block body %}<h1>Bot Token &amp; Admin</
 <label style="display:block;margin:8px 0"><input type="checkbox" name="tg" value="1" style="width:auto"> Also change the Telegram profile name of the bot</label>
 <button>Save name</button></form></div>{% endblock %}"""
 
-app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
+app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "assign.html": ASSIGN, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
 
 
 def csrf():
@@ -686,7 +792,61 @@ def products():
             c.execute("INSERT INTO products(name,descr) VALUES(?,?)", (request.form["name"].strip(), request.form.get("descr", "").strip()))
         flash("Product added")
         return redirect("/products")
-    return page("products", rows=db.products(False), tab="products")
+    allrows = db.products(False)
+    valid = {c["id"] for c in db.cats(False)}
+    none_ = [p for p in allrows if not p["cat_id"] or p["cat_id"] not in valid]
+    cf = request.args.get("cat", "all")
+    if cf == "none":
+        rows = none_
+    elif cf.isdigit() and int(cf) in valid:
+        rows = [p for p in allrows if p["cat_id"] == int(cf)]
+    else:
+        cf, rows = "all", allrows
+    return page("products", rows=rows, tab="products", cf=cf, n_all=len(allrows), n_none=len(none_))
+
+
+@app.route("/products/bulk", methods=["POST"])
+def products_bulk():
+    """tick many products -> move them to a category / show / hide in ONE tap"""
+    f, a = request.form, request.form.get("a")
+    ids = [int(x) for x in f.getlist("pid") if x.isdigit()][:900]
+    back = request.referrer or "/products"
+    if not ids:
+        flash("⚠️ Tick at least one product first")
+        return redirect(back)
+    q = ",".join("?" * len(ids))
+    with db.conn() as c:
+        if a == "move":
+            if f.get("cat_id", "") == "":
+                flash("⚠️ Choose a category in the box first")
+                return redirect(back)
+            cid = cat_of(f)
+            c.execute(f"UPDATE products SET cat_id=? WHERE id IN ({q})", [cid] + ids)
+            name = db.cat(cid)["name"] if cid else "no category"
+            flash(f"✅ {len(ids)} product(s) moved to {name}")
+        elif a in ("show", "hide"):
+            c.execute(f"UPDATE products SET active=? WHERE id IN ({q})", [1 if a == "show" else 0] + ids)
+            flash(f"✅ {len(ids)} product(s) are now {'visible' if a == 'show' else 'hidden'}")
+    db.emoji_clear()
+    return redirect(back)
+
+
+@app.route("/categories/<int:cid>/assign", methods=["GET", "POST"])
+def category_assign(cid):
+    c_ = db.cat(cid)
+    if not c_:
+        return redirect("/categories")
+    if request.method == "POST":
+        ids = {int(x) for x in request.form.getlist("pid") if x.isdigit()}
+        with db.conn() as c:
+            c.execute("UPDATE products SET cat_id=0 WHERE cat_id=?", (cid,))          # unticked leave
+            for i in list(ids)[:900]:
+                c.execute("UPDATE products SET cat_id=? WHERE id=?", (cid, i))
+        db.emoji_clear()
+        flash(f"✅ Saved - {len(ids)} product(s) are in {c_['name']}")
+        return redirect(f"/categories/{cid}/assign")
+    names = {x["id"]: x["name"] for x in db.cats(False)}
+    return page("assign", c=c_, rows=db.products(False), names=names, tab="categories")
 
 
 @app.route("/products/<int:pid>", methods=["GET", "POST"])
@@ -708,7 +868,7 @@ def product_page(pid):
             elif a == "setcat":
                 c.execute("UPDATE products SET cat_id=? WHERE id=?", (cat_of(f), pid))
                 flash("Category saved")
-                return redirect("/products")
+                return redirect(request.referrer or "/products")
             elif a == "del":
                 c.execute("DELETE FROM keys WHERE used=0 AND plan_id IN (SELECT id FROM plans WHERE product_id=?)", (pid,))
                 c.execute("DELETE FROM plans WHERE product_id=?", (pid,))
@@ -1145,5 +1305,14 @@ def panel_add():
     except panel.PanelError as e:
         flash("❌ " + e.msg)
         return redirect("/panel/products")
+    cid = cat_of(f)
+    if cid:
+        with db.conn() as c:
+            cond = "cat_id=0 OR cat_id NOT IN (SELECT id FROM categories)"
+            if ids is None:
+                c.execute(f"UPDATE products SET cat_id=? WHERE api_pid>0 AND ({cond})", (cid,))
+            elif ids:
+                c.execute(f"UPDATE products SET cat_id=? WHERE api_pid IN ({','.join('?' * len(ids))}) AND ({cond})", [cid] + ids)
+        db.emoji_clear()
     flash(f"✅ {np_} new product(s), {nl} new plan(s) added, {ul} existing plan(s) refreshed. Prices are set by your % automatically.")
     return redirect("/products")

@@ -141,3 +141,18 @@ Files changed: db.py, bot.py, web.py (main.py unchanged). Replace ALL files and 
 4) Website -> Users: shows "Refund hold", buttons [Approve refund] / [Deduct refund], and a "refund hold" tick box next to the Balance button:
    tick it when YOU add money by hand as a refund (e.g. panel crashed, you checked, no key was made) - the user must then be approved before spending it.
 5) Panel did not answer / crashed (unknown if a key was made): still NO automatic refund (as in V10) - you get the alert and decide.
+
+================ V14 ================
+Files changed: bot.py, web.py (main.py, db.py unchanged). Replace ALL files and redeploy. Old data is kept.
+1) /START: a small "Welcome🎉" appears, the main menu follows at once, and as soon as the menu is on screen
+   the Welcome message AND the user's own "/start" message are deleted automatically.
+2) NEW ADMIN PANEL LOOK: side menu in groups (Store / Sales / Customers / System), phone-friendly (☰ button),
+   Dashboard with quick actions + connection status, Settings has jump buttons and a Save button that stays on screen.
+3) NO PAGE REFRESH: every Save / Move / Approve button works in the background. The page stays where you were
+   and a small message pops up at the bottom ("Saved"). Slow actions show "⏳ ..." on the button.
+4) BULK SELECT (Website -> Products): tick many products (or "Select all"), choose a category in the box, press Move -> all saved at once.
+   Also Show / Hide for the ticked products, a search box, and category filter buttons (All / NON ROOT PANEL / No category ...).
+5) CATEGORY -> "Products" button (Website -> Categories): one screen with every product as a big tick row.
+   Tick the ones that belong to e.g. NON ROOT PANEL (or Select all) -> press Save. Unticked products leave that category.
+6) PANEL API -> Show Products: new box "Put new products into category" - added products go straight into that category
+   (only products that have no category yet are changed).
