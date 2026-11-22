@@ -1,4 +1,4 @@
-import os, io, json, time, threading, traceback, html
+import os, io, re, json, time, threading, traceback, html
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
@@ -190,22 +190,31 @@ def EX(eid, key):
     return E(key)
 
 
-def B(text, cb=None, url=None, style=None, ek=None, eid=None):
-    """button. eid = raw premium emoji ID (wins over the slot `ek`)"""
+BTN_STYLES = {"blue": "primary", "green": "success", "red": "danger", "plain": None}
+
+
+def B(text, cb=None, url=None, style=None, ek=None, eid=None, fb=None):
+    """button. eid = raw premium emoji ID (wins over the slot `ek`).
+    fb = a normal emoji typed by the admin (e.g. category button): it turns premium by itself when that emoji has a premium ID."""
     if eid:
-        fb, eid = db.emoji_direct(eid, db.emoji(ek)[0] if ek else "")
+        f, eid = db.emoji_direct(eid, fb if fb is not None else (db.emoji(ek)[0] if ek else ""))
+    elif fb is not None:
+        f, eid = fb, db.emoji_map().get(fb.replace("\ufe0f", ""), "")
     else:
-        fb, eid = db.emoji(ek) if ek else ("", "")
+        f, eid = db.emoji(ek) if ek else ("", "")
     b = {}
     if eid:
         b["text"] = text
         b["icon_custom_emoji_id"] = eid
     else:
-        b["text"] = (fb + " " + text).strip()
+        b["text"] = (f + " " + text).strip()
     if cb:
         b["callback_data"] = cb
     if url:
         b["url"] = url
+    mode = db.get_c("btn_color", "auto")
+    if mode in BTN_STYLES:          # website Settings -> "Button colour": ONE colour for every button
+        style = BTN_STYLES[mode]
     if style:
         b["style"] = style  # primary = blue, success = green, danger = red
     return b
@@ -244,11 +253,76 @@ def link(v, kind):
     return v if v.startswith("http") else "https://" + v
 
 
+# ------------------------------------------------------------------ V12: rich text helpers
+_BOLD_UP, _BOLD_LO, _BOLD_DG = 0x1D5D4, 0x1D5EE, 0x1D7EC     # Mathematical Sans-Serif Bold letters
+_EMO_RUN = "[\u2190-\u2BFF\u2600-\u27BF\U0001F000-\U0001FAFF\uFE0F\u200D]"
+_TOK = re.compile("(" + _EMO_RUN + "{1,8})?\\{(\\d{6,25})\\}")
+
+
+def deep(text):
+    """extra-heavy bold title: normal <b> looks thin on capital letters, these letters are drawn much thicker.
+    Website Settings -> 'Deep bold titles' can switch it off."""
+    text = str(text if text is not None else "")
+    if db.get_c("deep_bold", "1") == "0":
+        return f"<b>{esc(text)}</b>"
+    out = []
+    for ch in text:
+        o = ord(ch)
+        if "A" <= ch <= "Z":
+            out.append(chr(_BOLD_UP + o - 65))
+        elif "a" <= ch <= "z":
+            out.append(chr(_BOLD_LO + o - 97))
+        elif "0" <= ch <= "9":
+            out.append(chr(_BOLD_DG + o - 48))
+        else:
+            out.append(ch)
+    return "<b>" + esc("".join(out)) + "</b>"
+
+
+def _tg(fb, eid):
+    f, e = db.emoji_direct(eid, fb)
+    return f'<tg-emoji emoji-id="{e}">{f}</tg-emoji>' if e else f
+
+
+def _auto_emoji(s):
+    mp = db.emoji_map()
+    if not mp:
+        return esc(s)
+    out, i = [], 0
+    while i < len(s):
+        ch = s[i]
+        eid = mp.get(ch)
+        if eid:
+            j = i + 1
+            if j < len(s) and s[j] == "\ufe0f":
+                j += 1
+            out.append(_tg(s[i:j], eid))
+            i = j
+        else:
+            out.append(esc(ch))
+            i += 1
+    return "".join(out)
+
+
+def rich(text):
+    """admin-written text -> Telegram HTML with premium emoji.
+    1) a normal emoji that has a premium ID (main.py PREMIUM_EMOJI) becomes premium automatically
+    2) 🔥{6141106778563158041}  (emoji + {premium ID}) shows exactly that premium emoji"""
+    text = text or ""
+    res, last = [], 0
+    for m in _TOK.finditer(text):
+        res.append(_auto_emoji(text[last:m.start()]))
+        res.append(_tg(m.group(1) or "⭐", m.group(2)))
+        last = m.end()
+    res.append(_auto_emoji(text[last:]))
+    return "".join(res)
+
+
 # ------------------------------------------------------------------ screens
 def menu_screen(u):
     name = db.get("shop_name", "RG CHEAT SHOP")
     text = (
-        f"{E('top')} ━━ <b>{name}</b> ━━ {E('top')}\n\n"
+        f"{E('top')} ━━ {deep(name)} ━━ {E('top')}\n\n"
         f"{E('party')} Welcome back, <b><i>{esc(u['name'])}</i></b>\n\n"
         f"{E('bars')} ━ <b>STORE HIGHLIGHTS</b> ━ {E('bars')}\n\n"
         f"┃ {E('key')} Premium Game Keys\n"
@@ -325,6 +399,11 @@ def history_screen(u):
     return text, kb
 
 
+def refund_line(u):
+    h = db.hold_of(u)
+    return f"├── {E('wait')} Refund (needs approval): {fmt(u, h)}\n\n" if h > 0 else ""
+
+
 def profile_screen(u):
     n, spent, _ = db.stats(u["id"])
     role = "Reseller" if u["role"] == "reseller" else "Standard User"
@@ -335,6 +414,7 @@ def profile_screen(u):
         f"├── {E('phone')} Phone: {u['phone'] or '-'}\n\n"
         f"├── {E('globe')} Country: {u['country']}\n\n"
         f"├── {E('wallet')} Balance: {fmt(u, u['balance'])}\n\n"
+        f"{refund_line(u)}"
         f"├── {E('gift2')} Ref Balance: {fmt(u, u['ref_balance'])}\n\n"
         f"├── {E('cart')} Orders: {n}\n\n"
         f"├── {E('diamond')} Lifetime spent: {fmt(u, spent)}\n\n"
@@ -413,26 +493,57 @@ def role_name(u):
     return "Reseller" if u["role"] == "reseller" else "User"
 
 
-def shop_screen(u):
-    text = f"{E('cart')} <b>{esc(db.get('shop_name', 'SHOP'))}</b>\n{LINE}\n\n{E('lineup')} <b>Product Lineup</b>\n\n"
-    bl = [f"➳ {esc(x.strip())}" for x in db.get("shop_bullets").splitlines() if x.strip()]
+def shop_entry(u):
+    """Shop Now: category list when you made categories, else the product list (like before)"""
+    return cats_screen(u) if db.cats() else shop_screen(u)
+
+
+def cats_screen(u):
+    """screen 'Choose Your Device Category' - one button per category (Website -> Categories)"""
+    shop = db.get("shop_name", "SHOP")
+    title = (db.get("cat_title") or "").strip() or shop
+    text = f"{LINE}\n{E('cart')} {deep(title)} {E('cart')}\n{LINE}\n\n"
+    lines = [rich(x.strip()) for x in db.get("cat_text").splitlines() if x.strip()]
+    if lines:
+        text += "\n\n".join(lines) + "\n"
+    rows = []
+    for c in db.cats():
+        rows.append([B(c["name"], cb=f"cat:{c['id']}", style="primary", ek="cart", eid=(c["eid"] or "").strip() or None,
+                       fb=(c["emoji"] or "").strip() if (c["emoji"] or (c["eid"] or "").strip()) else None)])
+    if db.products(True, 0):
+        rows.append([B(db.get("cat_other_name") or "OTHER PRODUCTS", cb="cat:0", style="primary", ek="cart")])
+    rows.append([back_btn()])
+    return text, KB(*rows)
+
+
+def shop_screen(u, cid=None):
+    """product list. cid=None -> all products; cid=N -> products of category N; cid=0 -> products without category"""
+    cname = ""
+    if cid:
+        c = db.cat(cid)
+        cname = c["name"] if c else ""
+    elif cid == 0:
+        cname = db.get("cat_other_name") or "OTHER PRODUCTS"
+    text = f"{E('cart')} {deep(db.get('shop_name', 'SHOP'))}\n{LINE}\n\n{E('lineup')} <b>Product Lineup</b>"
+    text += (f" · <b>{esc(cname)}</b>\n\n" if cname else "\n\n")
+    bl = [f"➳ {rich(x.strip())}" for x in db.get("shop_bullets").splitlines() if x.strip()]
     if bl:
         text += "\n".join(bl) + "\n\n"
     rows = []
-    prods = db.products()
+    prods = db.products(True, cid)
     for p in prods:
         tag = "" if p["stock"] else " · Sold out"
         rows.append([B(p["name"] + tag, cb=f"p:{p['id']}", style="primary", ek="cart", eid=db.product_eid(p))])
     text += (f"{E('shield')} <b>Pick what you want</b> {E('tap')}\nTap any product to see options." if prods
              else "<i>No products available yet.</i>")
-    rows.append([back_btn()])
+    rows.append([B("BACK", cb="shop", style="danger", ek="back")] if cid is not None else [back_btn()])
     return text, KB(*rows)
 
 
 def prod_screen(u, pid):
     p = db.product(pid)
     if not p or not p["active"]:
-        return shop_screen(u)
+        return shop_entry(u)
     text = (f"<blockquote>{EX(db.product_eid(p), 'cart')} <b>{esc(p['name'])}</b></blockquote>\n\n"
             f"<blockquote>{E('crown')} Account Type: <b>{role_name(u)}</b></blockquote>\n\n"
             f"<blockquote>{E('chart')} <b>See Current Plans &amp; Pricing</b></blockquote>\n\n")
@@ -453,7 +564,8 @@ def prod_screen(u, pid):
         text += f"\n{E('tap')} <b>CHOOSE A PLAN</b> {E('tap')}"
     else:
         text += "<i>No plans available yet.</i>"
-    rows.append([B("BACK", cb="shop", style="danger", ek="back")])
+    back = f"cat:{int(p['cat_id'] or 0)}" if db.cats() else "shop"
+    rows.append([B("BACK", cb=back, style="danger", ek="back")])
     return text, KB(*rows)
 
 
@@ -502,7 +614,7 @@ def phone_txt(u):
 def plan_screen(u, plid):
     pl = db.plan(plid)
     if not pl or not pl["pactive"] or not pl["active"]:
-        return shop_screen(u)
+        return shop_entry(u)
     code = db.cp_get(u["id"], plid)
     final, disc, err = db.coupon_calc(u, pl, code)
     if err:
@@ -998,8 +1110,22 @@ def send_menu_preview():
     if not ADMIN_ID:
         return False
     u = db.user(ADMIN_ID) or sample_data()[0]
-    for scr in (menu_screen, shop_screen, ref_screen, tut_screen):
+    for scr in (menu_screen, shop_entry, ref_screen, tut_screen):
         t, k = scr(u)
+        send(ADMIN_ID, t, k)
+    return True
+
+
+def send_cat_preview():
+    """website button: sends the category screen (and the first category's product list) to the admin"""
+    if not ADMIN_ID:
+        return False
+    u = db.user(ADMIN_ID) or sample_data()[0]
+    t, k = shop_entry(u)
+    send(ADMIN_ID, t, k)
+    cs = db.cats()
+    if cs:
+        t, k = shop_screen(u, cs[0]["id"])
         send(ADMIN_ID, t, k)
     return True
 
@@ -1041,7 +1167,10 @@ def do_buy(uid, plid, coupon="", ext_price=None, on_go=None):
             key = panel.buy(plrow["api_plan_id"])
         except panel.PanelError as e:
             if e.definite:
-                db.add_balance(uid, price)      # money back: wallet purchase -> refund, UPI/QR payment -> wallet credit
+                if ext_price is None:
+                    db.add_balance(uid, price)  # wallet purchase: the reserved money simply goes back (no approval needed)
+                else:
+                    db.add_refund(uid, price)   # UPI / QR / Binance payment: refund to wallet, locked until admin approves its use
             return ("apifail", e.msg, price, e.definite)
         except Exception as e:
             traceback.print_exc()
@@ -1053,20 +1182,133 @@ def do_buy(uid, plid, coupon="", ext_price=None, on_go=None):
                 _busy.discard(uid)
 
 
-def api_fail_texts(u, refunded, price, ref, paid_by_gateway=False):
+def fail_reason(reason):
+    """short customer-friendly reason"""
+    r = (reason or "").lower()
+    if "stock" in r:
+        return "Out of stock"
+    return "Server issue"
+
+
+def refund_text(u, amount, reason, ref, pl=None):
+    """customer message when a PAID order (QR / UPI / Binance) could not be delivered: money returned to the bot wallet"""
+    lines = []
+    if pl:
+        lines.append(f"{E('c_product')} Product: <b>{esc(pl['pname'])}</b>")
+        lines.append(f"{E('c_plan')} Plan: <b>{esc(pl['name'])}</b>")
+    lines += [f"{E('n_note')} Reason: <b>{esc(fail_reason(reason))}</b>",
+              f"{E('n_money')} Refunded: <b>{fmt(u, amount)}</b>",
+              f"{E('n_wallet')} Wallet balance: <b>{fmt(u, u['balance'])}</b>",
+              f"{E('n_id')} Order Ref: <code>{esc(ref)}</code>"]
+    return (f"{E('cancel')} <b>ORDER FAILED — REFUND ISSUED</b>\n{LINE}\n\n"
+            f"We are sorry! We could not deliver your order this time.\n\n"
+            f"{tree(lines)}\n\n"
+            f"{E('money')} Your payment of <b>{fmt(u, amount)}</b> has been returned to your <b>bot wallet</b>. "
+            f"You can use it to buy any other product from our store.\n\n"
+            f"{E('info')} <i>Refunded balance is verified by our team: when you use it, our team approves your order first "
+            f"(usually within a few minutes).</i>")
+
+
+def wallet_fail_text(u, price, reason, ref, pl=None):
+    """customer message when a WALLET purchase failed: nothing was charged"""
+    lines = []
+    if pl:
+        lines.append(f"{E('c_product')} Product: <b>{esc(pl['pname'])}</b>")
+        lines.append(f"{E('c_plan')} Plan: <b>{esc(pl['name'])}</b>")
+    lines += [f"{E('n_note')} Reason: <b>{esc(fail_reason(reason))}</b>",
+              f"{E('n_wallet')} Wallet balance: <b>{fmt(u, u['balance'])}</b> (unchanged)",
+              f"{E('n_id')} Order Ref: <code>{esc(ref)}</code>"]
+    return (f"{E('cancel')} <b>ORDER FAILED — NOTHING CHARGED</b>\n{LINE}\n\n"
+            f"We are sorry! We could not deliver your order this time.\n\n"
+            f"{tree(lines)}\n\n"
+            f"{E('money')} <b>{fmt(u, price)}</b> was <b>not deducted</b> from your wallet. "
+            f"You can try again in a few minutes or buy another product.")
+
+
+def api_fail_texts(u, refunded, price, ref, paid_by_gateway=False, reason="", pl=None):
     """(text shown to the customer, wallet note for the admin alert)"""
     if refunded and paid_by_gateway:
-        return (f"{E('info')} Our key system had a small problem, so <b>{fmt(u, price)}</b> was added to your wallet instead. "
-                f"Please try again in a few minutes - or contact support.\n{E('receipt')} Ref: <code>{ref}</code>",
-                f"{fmt(u, price)} credited to the user's wallet automatically")
+        return (refund_text(u, price, reason, ref, pl),
+                f"{fmt(u, price)} returned to the user's wallet as REFUND (locked: you must approve before the user can spend it)")
     if refunded:
-        return (f"{E('cancel')} <b>Delivery failed</b>\nYour wallet was <b>not charged</b>. Please try again in a few minutes - or contact support.\n"
-                f"{E('receipt')} Ref: <code>{ref}</code>",
-                "Wallet refunded automatically - nothing was charged")
+        return (wallet_fail_text(u, price, reason, ref, pl), "Wallet refunded automatically - nothing was charged")
     return (f"{E('wait')} <b>Your order is being processed</b>\nThe key is taking longer than usual. Our team has been told and will send "
             f"your key (or refund you) very soon. Please do not buy again.\n{E('receipt')} Ref: <code>{ref}</code>",
             "NOT refunded automatically (unknown if the panel made the key) - check the panel order history, then send the key "
-            "or add the balance back (Website -> Users)")
+            "or add the balance back (Website -> Users, tick 'refund hold' so you approve its use)")
+
+
+# ---------------- refund approval (V13)
+def notify_refund_request(u, pl, price, hold, rid):
+    """admin: a user wants to spend refunded money - Approve / Reject"""
+    free = max(0.0, u["balance"] - hold)
+    cust = tree([
+        kv("n_user", "Name", f"<b>{esc(g(u, 'name'))}</b>"),
+        kv("n_link", "Username", uname_txt(u)),
+        kv("n_id", "Telegram User ID", code(g(u, "id"))),
+        kv("n_phone", "Phone", code(phone_txt(u))),
+    ])
+    order = tree([
+        kv("n_box", "Product", esc(pl["pname"])),
+        kv("n_plan", "Plan", esc(pl["name"])),
+        kv("n_money", "Price", f"<b>{money_sym(u, price)}</b>"),
+        kv("n_wallet", "Wallet balance", f"<b>{money_sym(u, u['balance'])}</b>"),
+        kv("n_cash", "Refunded money (locked)", f"<b>{money_sym(u, hold)}</b>"),
+        kv("n_diamond", "Free money", f"<b>{money_sym(u, free)}</b>"),
+        kv("n_date", "Time", now_ist() + " IST"),
+    ])
+    kb = KB([B("Approve", cb=f"ra:{rid}", style="success", ek="confirm"), B("Reject", cb=f"rr:{rid}", style="danger", ek="cancel")],
+            *contact_kb(u)["inline_keyboard"])
+    admin_send(f"{E('n_alert')} <b>REFUND BALANCE — APPROVAL NEEDED</b> {E('n_alert')}\n{LINE}\n\n"
+               f"This user got a refund earlier and now wants to buy with it. "
+               f"<b>Check that you did not already send the key by hand.</b>\n\n"
+               f"<b>CUSTOMER</b>\n{cust}\n\n<b>ORDER</b>\n{order}\n\n"
+               f"{E('confirm')} <b>Approve</b> = the user can buy.\n{E('cancel')} <b>Reject</b> = the refunded {money_sym(u, hold)} is taken back from the wallet.", kb)
+
+
+def refund_gate(cq, uid, plid, chat):
+    """wallet purchase that would spend refunded money -> ask the admin. True = stop here (request sent / already waiting)"""
+    u = db.user(uid)
+    hold = db.hold_of(u)
+    pl = db.plan(plid)
+    if hold <= 0 or not pl:
+        return False
+    final, _d, err = db.coupon_calc(u, pl, db.cp_get(uid, plid))
+    if err or u["balance"] < final or u["balance"] - hold >= final:
+        return False            # free money is enough (or not enough money at all: normal flow answers that)
+    rid = db.rq_create(uid, plid, final, hold)
+    if rid is None:
+        ans(cq, "Your request is already waiting for approval. Please wait a moment.", True)
+        return True
+    ans(cq)
+    info = tree([f"{E('c_product')} Product: <b>{esc(pl['pname'])}</b>", f"{E('c_plan')} Plan: <b>{esc(pl['name'])}</b>"])
+    send(chat, f"{E('wait')} <b>WAITING FOR APPROVAL</b>\n{LINE}\n\n"
+               f"Your wallet contains a <b>refund of {fmt(u, hold)}</b>. For your safety our team confirms the order before refunded money is used.\n\n"
+               f"{info}\n\n"
+               f"You will get a message here as soon as it is approved. No need to do anything.",
+         KB([menu_btn()]))
+    safe(notify_refund_request, u, pl, final, hold, rid)
+    return True
+
+
+def refund_user_msg(uid, ok, hold, plan_id=0):
+    """tell the user what the admin decided"""
+    u = db.user(uid)
+    if not u:
+        return
+    if ok:
+        rows = []
+        if plan_id:
+            rows.append([B("Continue to checkout", cb=f"pl:{plan_id}", style="success", ek="bag")])
+        rows.append([menu_btn()])
+        send(uid, f"{E('confirm')} <b>REFUND BALANCE APPROVED</b>\n{LINE}\n\n"
+                  f"Your refunded balance of <b>{fmt(u, hold)}</b> is now unlocked and ready to use.\n"
+                  f"Wallet balance: <b>{fmt(u, u['balance'])}</b>\n\nTap the button below to complete your purchase.", KB(*rows))
+    else:
+        send(uid, f"{E('cancel')} <b>REFUND BALANCE REMOVED</b>\n{LINE}\n\n"
+                  f"Our team could not approve the use of your refunded balance, so <b>{fmt(u, hold)}</b> was removed from your wallet.\n"
+                  f"Wallet balance: <b>{fmt(u, u['balance'])}</b>\n\nIf you think this is a mistake, please contact support.",
+             KB([B("Support", cb="sup", style="primary", ek="b_support")], [menu_btn()]))
 
 
 def complete_pay(pay_no, txn=""):
@@ -1109,20 +1351,18 @@ def complete_pay(pay_no, txn=""):
             _t, reason, amt_, refunded = res
             u = db.user(uid)
             pl = db.plan(pay["plan_id"])
-            utext, wnote = api_fail_texts(u, refunded, amt_, pay_no, paid_by_gateway=True)
-            send(chat, success_block(u, pay, txn, f"└── {E('wallet')} Wallet balance: <b>{fmt(u, u['balance'])}</b>\n") + "\n" + utext,
-                 KB([B("Shop Now", cb="shop", style="primary", ek="b_shop")], [back_btn()]))
+            utext, wnote = api_fail_texts(u, refunded, amt_, pay_no, paid_by_gateway=True, reason=reason, pl=pl)
+            send(chat, utext, KB([B("Shop Now", cb="shop", style="primary", ek="b_shop")], [back_btn()]))
             safe(notify_key_failed, u, pl["pname"] if pl else pay["title"], pl["name"] if pl else "-", pay["amount"], mlabel,
                  pay_no, "Panel API: " + reason, wnote)
         else:
             u = db.user(uid)
-            send(chat, success_block(u, pay, txn, f"└── {E('wallet')} Wallet balance: <b>{fmt(u, u['balance'])}</b>\n") +
-                 f"\n{E('info')} The item just went out of stock, so <b>{fmt(u, pay['amount'])}</b> was added to your wallet instead. "
-                 f"You can buy another plan with it.", KB([B("Shop Now", cb="shop", style="primary", ek="b_shop")], [back_btn()]))
             pl = db.plan(pay["plan_id"])
+            send(chat, refund_text(u, pay["amount"], "Out of stock", pay_no, pl),
+                 KB([B("Shop Now", cb="shop", style="primary", ek="b_shop")], [back_btn()]))
             safe(notify_key_failed, u, pl["pname"] if pl else pay["title"], pl["name"] if pl else "-", pay["amount"], mlabel,
                  pay_no, "Payment received but the key could not be issued (out of stock).",
-                 f"{fmt(u, pay['amount'])} credited to the user's wallet automatically")
+                 f"{fmt(u, pay['amount'])} returned to the user's wallet as REFUND (locked: you must approve before the user can spend it)")
     return pay
 
 
@@ -1435,6 +1675,20 @@ def on_cb(cq):
         if res:
             send(chat, f"{'✅ Approved' if ok else '❌ Rejected'} payment <code>{no}</code>.")
         return
+    if data[:3] in ("ra:", "rr:"):
+        if uid != ADMIN_ID:
+            ans(cq, "Not allowed.", True)
+            return
+        ok = data.startswith("ra:")
+        res = db.rq_decide(int(data[3:]), ok)
+        api("editMessageReplyMarkup", chat_id=chat, message_id=mid, reply_markup=json.dumps({"inline_keyboard": []}))
+        ans(cq, ("Approved" if ok else "Rejected - refunded money removed") if res else "Already handled", True)
+        if res:
+            r, hold = res
+            send(chat, f"{'✅ Approved' if ok else '❌ Rejected'} refund request <code>#{r['id']}</code> · user <code>{r['user_id']}</code> · {hold:.2f}"
+                       + ("" if ok else " removed from wallet"))
+            safe(refund_user_msg, r["user_id"], ok, hold, r["plan_id"])
+        return
     if data[:3] in ("da:", "dr:"):
         if uid != ADMIN_ID:
             ans(cq, "Not allowed.", True)
@@ -1467,7 +1721,9 @@ def on_cb(cq):
         db.st_set(uid, "")
         sh(*menu_screen(u))
     elif data == "shop":
-        sh(*shop_screen(u))
+        sh(*shop_entry(u))
+    elif data.startswith("cat:"):
+        sh(*shop_screen(u, int(data[4:] or 0)))
     elif data.startswith("p:"):
         sh(*prod_screen(u, int(data[2:])))
     elif data.startswith("pl:"):
@@ -1581,6 +1837,8 @@ def on_cb(cq):
         return
     elif data.startswith("buy:"):
         plid_b = int(data[4:])
+        if refund_gate(cq, uid, plid_b, chat):
+            return
         res = do_buy(uid, plid_b, db.cp_get(uid, plid_b), on_go=lambda: ans(cq, "⏳ Processing your order..."))
         if res[0] == "busy":
             ans(cq, "Your previous order is still processing. Please wait a moment.", True)
@@ -1588,7 +1846,7 @@ def on_cb(cq):
         if res[0] == "apifail":
             _t, reason, price_, refunded = res
             u3, pl3, ref = db.user(uid), db.plan(plid_b), db.new_order_no()
-            utext, wnote = api_fail_texts(u3, refunded, price_, ref)
+            utext, wnote = api_fail_texts(u3, refunded, price_, ref, reason=reason, pl=pl3)
             safe(notify_key_failed, u3, pl3["pname"] if pl3 else "-", pl3["name"] if pl3 else "-", price_, "Wallet Balance", ref,
                  "Panel API: " + reason, wnote, paid=not refunded)
             send(chat, utext, KB([menu_btn()]))

@@ -52,7 +52,7 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-a
 </style></head><body>
 {% if session.get('ok') %}<nav>
 <a href="/" class="{{ 'on' if tab=='home' }}">Dashboard</a>
-<a href="/products" class="{{ 'on' if tab=='products' }}">Products</a><a href="/panel" class="{{ 'on' if tab=='panel' }}">Panel API</a><a href="/deposits" class="{{ 'on' if tab=='deposits' }}">Deposits</a><a href="/payments" class="{{ 'on' if tab=='payments' }}">QR Payments</a><a href="/find" class="{{ 'on' if tab=='find' }}">Find Order</a><a href="/coupons" class="{{ 'on' if tab=='coupons' }}">Coupons</a>
+<a href="/products" class="{{ 'on' if tab=='products' }}">Products</a><a href="/categories" class="{{ 'on' if tab=='categories' }}">Categories</a><a href="/panel" class="{{ 'on' if tab=='panel' }}">Panel API</a><a href="/deposits" class="{{ 'on' if tab=='deposits' }}">Deposits</a><a href="/payments" class="{{ 'on' if tab=='payments' }}">QR Payments</a><a href="/find" class="{{ 'on' if tab=='find' }}">Find Order</a><a href="/coupons" class="{{ 'on' if tab=='coupons' }}">Coupons</a>
 <a href="/orders" class="{{ 'on' if tab=='orders' }}">Orders</a><a href="/users" class="{{ 'on' if tab=='users' }}">Users</a>
 <a href="/broadcast" class="{{ 'on' if tab=='broadcast' }}">Broadcast</a><a href="/backup" class="{{ 'on' if tab=='backup' }}">Backup</a>
 <a href="/botcfg" class="{{ 'on' if tab=='botcfg' }}">Bot Token</a><a href="/settings" class="{{ 'on' if tab=='settings' }}">Settings</a>
@@ -94,6 +94,13 @@ SETTINGS = """{% extends 'base.html' %}{% block body %}<h1>Settings</h1><form me
 <div class="card"><h3>Store</h3><label>Shop name (main menu title)</label><input name="shop_name" value="{{ gs('shop_name') }}">
 <label>Minimum deposit</label><input name="min_dep" value="{{ gs('min_dep') }}"><label>Maximum deposit</label><input name="max_dep" value="{{ gs('max_dep') }}">
 <label>Referral reward (when friend verifies phone)</label><input name="ref_reward" value="{{ gs('ref_reward') }}"></div>
+<div class="card"><h3>Look &amp; feel (bot buttons and titles)</h3>
+<label>Button colour - ONE colour for ALL buttons in the bot</label><select name="btn_color">
+<option value="auto" {{ 'selected' if gs('btn_color') not in ('blue','green','red','plain') }}>Auto (each button as designed: blue / green / red)</option>
+<option value="blue" {{ 'selected' if gs('btn_color')=='blue' }}>All BLUE</option><option value="green" {{ 'selected' if gs('btn_color')=='green' }}>All GREEN</option>
+<option value="red" {{ 'selected' if gs('btn_color')=='red' }}>All RED</option><option value="plain" {{ 'selected' if gs('btn_color')=='plain' }}>All WHITE / normal (no colour)</option></select>
+<label>Deep bold titles (shop name in the main menu, shop and category screens)</label><select name="deep_bold"><option value="1" {{ 'selected' if gs('deep_bold')!='0' }}>ON (extra thick letters)</option><option value="0" {{ 'selected' if gs('deep_bold')=='0' }}>OFF (normal bold)</option></select>
+<p class="mu">Changes show in the bot within a few seconds. Use Categories &rarr; "Send to my Telegram" to preview.</p></div>
 <div class="card"><h3>Payment (deposits)</h3><label>UPI ID (India users get a QR for this)</label><input name="upi_id" value="{{ gs('upi_id') }}" placeholder="name@bank">
 <label>UPI payee name</label><input name="upi_name" value="{{ gs('upi_name') }}">
 <label>Payment instructions for other countries (bKash / bank / crypto etc.)</label><textarea name="pay_other_text" rows="4">{{ gs('pay_other_text') }}</textarea></div>
@@ -129,7 +136,9 @@ Webhook URL to set in your gateway: <code>{{ webhook_url() }}</code></p></div>
 <button type="submit" formaction="/notifications/test">Send sample messages to my Telegram</button></div>
 <div class="card"><h3>Store screen &amp; sign-up</h3>
 <label>Phone number verification at /start</label><select name="verify_on"><option value="1" {{ 'selected' if gs('verify_on')!='0' }}>ON (ask phone number)</option><option value="0" {{ 'selected' if gs('verify_on')=='0' }}>OFF (no phone needed)</option></select>
-<label>Shop screen lines (one per line, shown under "Product Lineup")</label><textarea name="shop_bullets" rows="5">{{ gs('shop_bullets') }}</textarea></div>
+<label>Shop screen lines (one per line, shown under "Product Lineup")</label><textarea name="shop_bullets" rows="5">{{ gs('shop_bullets') }}</textarea>
+<p class="mu"><b>Premium emoji:</b> type a normal emoji (🔑 🔥 🛡 🚫 💎 ...) - if that emoji has a premium ID in main.py it becomes premium automatically.
+Or write <code>🔥{6141106778563158041}</code> (emoji + <b>{premium ID}</b>) to use any premium emoji you want.</p></div>
 <div class="card"><h3>Manual payments (UPI / Binance)</h3>
 <p class="mu">Customer pays, taps <b>I Have Paid</b>, sends the transaction ID, and YOU get a notification with Approve / Reject.</p>
 <label>Pay UPI button (needs the UPI ID in "Payment (deposits)")</label><select name="pay_upi_on"><option value="1" {{ 'selected' if gs('pay_upi_on')=='1' }}>ON</option><option value="0" {{ 'selected' if gs('pay_upi_on')!='1' }}>OFF</option></select>
@@ -142,9 +151,10 @@ Webhook URL to set in your gateway: <code>{{ webhook_url() }}</code></p></div>
 
 USERS = """{% extends 'base.html' %}{% block body %}<h1>Users</h1><form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Search ID / name / phone"><button style="margin:0">Search</button></form><br>
 <div class="card tw"><table><tr><th>ID</th><th>Name</th><th>Phone</th><th>Balance</th><th>Account type</th><th>Actions</th></tr>
-{% for u in rows %}<tr><td>{{ u.id }}</td><td>{{ u.name }}</td><td>{{ u.phone or '-' }}</td><td>{{ u.symbol }}{{ '%.2f'|format(u.balance) }}</td>
+{% for u in rows %}<tr><td>{{ u.id }}</td><td>{{ u.name }}</td><td>{{ u.phone or '-' }}</td><td>{{ u.symbol }}{{ '%.2f'|format(u.balance) }}{% set h_ = [[u.refund_hold or 0, u.balance]|min, 0]|max %}{% if h_ > 0 %}<br><span class="wt">Refund hold: {{ '%.2f'|format(h_) }}</span>{% endif %}</td>
 <td>{{ u.role }}{{ ' (banned)' if u.banned }}</td><td><form method="post" action="/users/{{ u.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}">
-<input name="amt" placeholder="+100 / -50" style="width:90px;flex:none"><button name="a" value="bal" style="margin:0">Balance</button>
+<input name="amt" placeholder="+100 / -50" style="width:90px;flex:none"><label style="margin:0;display:flex;align-items:center;gap:4px;white-space:nowrap" title="tick when you add money as a REFUND: the user can spend it only after you approve"><input type="checkbox" name="hold" value="1" style="width:auto"> refund hold</label><button name="a" value="bal" style="margin:0">Balance</button>
+{% if (u.refund_hold or 0) > 0 and u.balance > 0 %}<button name="a" value="rok" style="margin:0" onclick="return confirm('Approve: the refunded money becomes normal wallet money?')">Approve refund</button><button name="a" value="rno" class="red" style="margin:0" onclick="return confirm('Take the refunded money back from the wallet?')">Deduct refund</button>{% endif %}
 <button name="a" value="role" style="margin:0">{{ 'Make user' if u.role=='reseller' else 'Make reseller' }}</button>
 <button name="a" value="ban" class="red" style="margin:0">{{ 'Unban' if u.banned else 'Ban' }}</button></form></td></tr>{% endfor %}</table></div>{% endblock %}"""
 
@@ -158,8 +168,9 @@ An emoji set on a single product (open the product) wins over the "all products"
 <label>One emoji for ALL plans (A to Z)</label><input name="emoji_all_plans" value="{{ gs('emoji_all_plans') }}" inputmode="numeric" placeholder="premium emoji ID" autocomplete="off">
 <button name="a" value="save">Save</button>
 <button name="a" value="apply" class="red" onclick="return confirm('Remove every single-product emoji so the ONE emoji is used for all products?')">Save &amp; use for ALL products</button></form></div>
-<div class="card tw"><table><tr><th>Name</th><th>Plans</th><th>Stock</th><th>Emoji ID</th><th>Status</th><th></th></tr>
-{% for p in rows %}<tr><td><a class="lk" href="/products/{{ p.id }}">{{ p.name }}</a></td><td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td class="mu">{{ p.emoji_id or ('(all-products emoji)' if gs('emoji_all_products') else '-') }}</td>
+<div class="card tw"><table><tr><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Emoji ID</th><th>Status</th><th></th></tr>
+{% for p in rows %}<tr><td><a class="lk" href="/products/{{ p.id }}">{{ p.name }}</a></td>
+<td><form method="post" action="/products/{{ p.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="setcat"><select name="cat_id" style="min-width:130px" onchange="this.form.submit()"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select></form></td><td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td class="mu">{{ p.emoji_id or ('(all-products emoji)' if gs('emoji_all_products') else '-') }}</td>
 <td>{{ 'Visible' if p.active else 'Hidden' }}</td><td><a class="lk" href="/products/{{ p.id }}">Open</a></td></tr>{% endfor %}</table></div>{% endblock %}"""
 
 PRODUCT = """{% extends 'base.html' %}{% block body %}<h1>{{ p.name }}</h1>
@@ -167,6 +178,7 @@ PRODUCT = """{% extends 'base.html' %}{% block body %}<h1>{{ p.name }}</h1>
 <label>Name</label><input name="name" value="{{ p.name }}"><label>Description</label><input name="descr" value="{{ p.descr }}">
 <label>Update group link (Join Telegram button after purchase)</label><input name="link" value="{{ p.link or '' }}" placeholder="https://t.me/yourgroup">
 <label>Premium emoji ID for THIS product (empty = use the "all products" emoji)</label><input name="emoji_id" value="{{ p.emoji_id or '' }}" inputmode="numeric" placeholder="premium emoji ID" autocomplete="off">
+<label>Category (shown after the customer picks a category in Shop Now)</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select>
 <label>Sort order (small = first)</label><input name="sort" value="{{ p.sort }}">
 <label>Visibility</label><select name="active"><option value="1" {{ 'selected' if p.active }}>Visible</option><option value="0" {{ 'selected' if not p.active }}>Hidden</option></select>
 <button>Save</button></form>
@@ -226,7 +238,30 @@ PAYMENTS = '{% extends \'base.html\' %}{% block body %}<h1>QR / Manual Payments<
 COUPONS = '{% extends \'base.html\' %}{% block body %}<h1>Coupons</h1>\n<div class="card"><h3>Create coupon</h3><p class="mu">A coupon gives a discount on one purchase. Each user can use a coupon once.</p>\n<form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="add">\n<label>Code (letters/numbers)</label><input name="code" required placeholder="RG50">\n<label>Type</label><select name="kind"><option value="percent">Percent off (%)</option><option value="flat">Flat off (INR)</option></select>\n<label>Value</label><input name="value" required placeholder="10">\n<label>Max total uses (0 = unlimited)</label><input name="max_uses" value="0">\n<label>Valid for days (0 = no expiry)</label><input name="days" value="0"><button>Create coupon</button></form></div>\n<div class="card tw"><table><tr><th>Code</th><th>Discount</th><th>Used</th><th>Expires</th><th>Status</th><th></th></tr>\n{% for c in rows %}<tr><td><b>{{ c.code }}</b></td><td>{{ (c.value|string + \'%\') if c.kind==\'percent\' else (\'₹\' + c.value|string) }}</td><td>{{ c.used }} / {{ c.max_uses or \'∞\' }}</td>\n<td>{{ c.expires|ts if c.expires else \'never\' }}</td><td>{{ \'Active\' if c.active else \'Off\' }}</td>\n<td><form method="post" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="code" value="{{ c.code }}">\n<button name="a" value="toggle" style="margin:0">{{ \'Turn off\' if c.active else \'Turn on\' }}</button><button name="a" value="del" class="red" style="margin:0" onclick="return confirm(\'Delete coupon?\')">Delete</button></form></td></tr>{% endfor %}</table></div>{% endblock %}'
 PAYPAGE = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>{{ shop }} · Payment</title><style>\n*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -10%,#1b2a4a 0,#0a0e17 55%);color:#eaf0ff;font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;padding:18px}\n.card{width:100%;max-width:410px;background:#111827;border:1px solid #223049;border-radius:20px;padding:22px;box-shadow:0 20px 60px #0008;align-self:flex-start;margin-top:10px}\n.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.shop{font-weight:700;font-size:16px}.sec{font-size:12px;color:#7ee0a0;background:#12301f;padding:4px 10px;border-radius:99px}\n.amt{text-align:center;margin:10px 0 4px;font-size:38px;font-weight:800}.sub{text-align:center;color:#8b96b3;font-size:13px;margin-bottom:14px}\n.qr{background:#fff;border-radius:16px;padding:14px;width:240px;height:240px;margin:0 auto;display:flex;align-items:center;justify-content:center}.qr svg{width:100%;height:100%}\n.row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #1d2940;font-size:14px}.row span:first-child{color:#8b96b3}.row b{text-align:right;word-break:break-all}\n.btn{display:block;text-align:center;text-decoration:none;background:#3b82f6;color:#fff;padding:13px;border-radius:12px;font-weight:600;margin-top:16px}.btn.g{background:#16a34a}\n.wait{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px;color:#ffd166;font-size:14px}.dot{width:10px;height:10px;border-radius:50%;background:#ffd166;animation:p 1s infinite}@keyframes p{50%{opacity:.25}}\n.tm{text-align:center;color:#8b96b3;font-size:13px;margin-top:8px}.ok{width:84px;height:84px;border-radius:50%;background:#16a34a;margin:6px auto 14px;display:flex;align-items:center;justify-content:center;animation:pop .5s}\n@keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}.ok svg{width:46px;height:46px}.big{text-align:center;font-size:22px;font-weight:800}.bad{background:#dc2626}\n.mu{color:#8b96b3;font-size:12px;text-align:center;margin-top:14px}\n</style></head><body><div class="card">\n<div class="top"><div class="shop">{{ shop }}</div><div class="sec">🔒 Secure UPI</div></div>\n{% if p.status == \'paid\' %}\n<div class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>\n<div class="big">Payment Successful</div><div class="sub">{{ sym }}{{ \'%.2f\'|format(p.pay_amount or p.amount) }} received</div>\n<div class="row"><span>Order ID</span><b>{{ p.pay_no }}</b></div>\n<div class="row"><span>Transaction ID</span><b>{{ p.txn or \'-\' }}</b></div>\n<div class="row"><span>{{ \'Wallet\' if p.kind==\'topup\' else \'Item\' }}</span><b>{{ \'Recharge added to wallet\' if p.kind==\'topup\' else p.title }}</b></div>\n<div class="row"><span>Paid on</span><b>{{ p.paid_at|ts }} IST</b></div>\n<div class="row"><span>Status</span><b style="color:#4ade80">SUCCESS</b></div>\n<p class="sub" style="margin-top:14px">{{ \'Your wallet balance is updated.\' if p.kind==\'topup\' else \'Your key has been sent in Telegram.\' }}</p>\n{% if bot_user %}<a class="btn g" href="https://t.me/{{ bot_user }}">Back to Telegram</a>{% endif %}\n{% elif p.status in (\'expired\',\'cancelled\') %}\n<div class="ok bad"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>\n<div class="big">Payment {{ \'Expired\' if p.status==\'expired\' else \'Cancelled\' }}</div><div class="sub">Order {{ p.pay_no }}<br>If you already paid, it will be added automatically.</div>\n{% if bot_user %}<a class="btn" href="https://t.me/{{ bot_user }}">Back to Telegram</a>{% endif %}\n{% else %}\n<div class="amt">{{ sym }}{{ \'%.2f\'|format(p.pay_amount or p.amount) }}</div><div class="sub">{{ p.title }}</div>\n<div class="qr">{{ qr|safe if qr else \'QR not available\' }}</div>\n<div class="tm">Expires in <b id="t">--:--</b></div>\n<div class="wait"><span class="dot"></span> Waiting for payment…</div>\n{% if p.upi_uri %}<a class="btn" href="{{ p.upi_uri }}">Pay with UPI App</a>{% elif p.pay_url %}<a class="btn" href="{{ p.pay_url }}">Open payment link</a>{% endif %}\n<div class="row" style="margin-top:14px"><span>Order ID</span><b>{{ p.pay_no }}</b></div>\n<p class="mu">Scan with PhonePe, Google Pay, Paytm or any UPI app.<br>Do not close this page — it updates automatically.</p>\n<script>var left={{ left }};function f(){var m=Math.floor(left/60),s=left%60;document.getElementById(\'t\').textContent=(m<10?\'0\':\'\')+m+\':\'+(s<10?\'0\':\'\')+s;if(left<=0){location.reload();return}left--}f();setInterval(f,1000);\nsetInterval(function(){fetch(\'status\').then(function(r){return r.json()}).then(function(j){if(j.status!==\'pending\')location.reload()}).catch(function(){})},3000);</script>\n{% endif %}\n</div></body></html>'
 
-NEWPRODUCT = '{% extends \'base.html\' %}{% block body %}<h1>Add product</h1>\n<div class="card"><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Product name</label><input name="name" required placeholder="e.g. Br Mods Pc Emulator">\n<label>Update group link (Join Telegram button after purchase) - optional</label><input name="link" placeholder="https://t.me/yourgroup">\n<label>Premium emoji ID for this product - optional</label><input name="emoji_id" inputmode="numeric" placeholder="premium emoji ID">\n<h3>Plans</h3><p class="mu">Duration + Hours/Days, then User price and Reseller price (INR). Press <b>+ Add another plan</b> for more. Reseller price empty = same as user price.</p>\n<div id="rows"></div><button type="button" onclick="addRow()" style="margin:6px 0">+ Add another plan</button>\n<script>function addRow(){var d=document.createElement(\'div\');d.className=\'row\';d.style.cssText=\'flex-wrap:wrap;gap:6px;margin:8px 0\';\nd.innerHTML=\'<input name="dur" type="number" min="1" step="1" placeholder="Duration" style="width:95px;flex:none" required><select name="unit" style="width:95px;flex:none"><option value="hours">Hours</option><option value="days" selected>Days</option></select><input name="uprice" placeholder="User price" style="width:110px;flex:none" required><input name="rprice" placeholder="Reseller price" style="width:125px;flex:none"><button type="button" class="red" style="margin:0" onclick="this.parentNode.remove()">X</button>\';\ndocument.getElementById(\'rows\').appendChild(d)}addRow();</script>\n<button>Save product</button></form></div>{% endblock %}'
+CATS = """{% extends 'base.html' %}{% block body %}<h1>Categories</h1>
+<div class="card"><p class="mu">When you add categories, <b>Shop Now</b> first shows the category buttons (e.g. NON ROOT PANEL, ROOT PANEL, iPHONE PANEL, PC PANEL, FF GUILD GLORY ...).
+The customer taps a category and sees only the products of that category. Make as many categories as you want. Assign a product to a category in
+<a class="lk" href="/products">Products</a> (drop-down in the list). Products with no category appear under the "other" button. No categories = Shop Now shows all products like before.</p>
+<form method="post" action="/categories/preview" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf() }}"><button>Send category screen + shop to my Telegram</button></form></div>
+<div class="card"><h3>Add category</h3><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="add">
+<label>Name (button text)</label><input name="name" required placeholder="e.g. NON ROOT PANEL">
+<label>Normal emoji (optional - turns premium automatically if it has a premium ID)</label><input name="emoji" placeholder="e.g. 📱">
+<label>Premium emoji ID for the button (optional - wins over the normal emoji)</label><input name="eid" inputmode="numeric" placeholder="premium emoji ID" autocomplete="off">
+<label>Sort order (small = first)</label><input name="sort" value="0"><button>Add category</button></form></div>
+<div class="card tw"><h3>Your categories</h3><table><tr><th>Name</th><th>Emoji</th><th>Premium ID</th><th>Sort</th><th>Show</th><th>Products</th><th></th></tr>
+{% for c in rows %}<tr><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="cid" value="{{ c.id }}">
+<td><input name="name" value="{{ c.name }}" style="min-width:150px"></td><td><input name="emoji" value="{{ c.emoji }}" style="width:60px"></td>
+<td><input name="eid" value="{{ c.eid }}" inputmode="numeric" style="min-width:150px" autocomplete="off"></td><td><input name="sort" value="{{ c.sort }}" style="width:60px"></td>
+<td><select name="active"><option value="1" {{ 'selected' if c.active }}>Yes</option><option value="0" {{ 'selected' if not c.active }}>No</option></select></td><td>{{ c.nprod }}</td>
+<td><button name="a" value="save" style="margin:0">Save</button> <button name="a" value="del" class="red" style="margin:0" onclick="return confirm('Delete this category? Its products are kept (they move to the other button).')">X</button></td></form></tr>{% endfor %}
+{% if not rows %}<tr><td colspan="7" class="mu">No category yet.</td></tr>{% endif %}</table></div>
+<div class="card"><h3>Category screen text</h3><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="text">
+<label>Title (empty = shop name)</label><input name="cat_title" value="{{ gs('cat_title') }}" placeholder="{{ gs('shop_name') }}">
+<label>Lines under the title (one per line)</label><textarea name="cat_text" rows="4">{{ gs('cat_text') }}</textarea>
+<p class="mu"><b>Premium emoji in the lines:</b> type a normal emoji - if it has a premium ID in main.py it becomes premium automatically. Or write <code>🔥{6141106778563158041}</code> (emoji + <b>{premium ID}</b>) for any premium emoji you want.</p>
+<label>Button name for products without a category</label><input name="cat_other_name" value="{{ gs('cat_other_name') }}">
+<button>Save text</button></form></div>{% endblock %}"""
+NEWPRODUCT = '{% extends \'base.html\' %}{% block body %}<h1>Add product</h1>\n<div class="card"><form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Product name</label><input name="name" required placeholder="e.g. Br Mods Pc Emulator">\n<label>Update group link (Join Telegram button after purchase) - optional</label><input name="link" placeholder="https://t.me/yourgroup">\n<label>Premium emoji ID for this product - optional</label><input name="emoji_id" inputmode="numeric" placeholder="premium emoji ID">\n<label>Category - optional</label><select name="cat_id"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>\n<h3>Plans</h3><p class="mu">Duration + Hours/Days, then User price and Reseller price (INR). Press <b>+ Add another plan</b> for more. Reseller price empty = same as user price.</p>\n<div id="rows"></div><button type="button" onclick="addRow()" style="margin:6px 0">+ Add another plan</button>\n<script>function addRow(){var d=document.createElement(\'div\');d.className=\'row\';d.style.cssText=\'flex-wrap:wrap;gap:6px;margin:8px 0\';\nd.innerHTML=\'<input name="dur" type="number" min="1" step="1" placeholder="Duration" style="width:95px;flex:none" required><select name="unit" style="width:95px;flex:none"><option value="hours">Hours</option><option value="days" selected>Days</option></select><input name="uprice" placeholder="User price" style="width:110px;flex:none" required><input name="rprice" placeholder="Reseller price" style="width:125px;flex:none"><button type="button" class="red" style="margin:0" onclick="this.parentNode.remove()">X</button>\';\ndocument.getElementById(\'rows\').appendChild(d)}addRow();</script>\n<button>Save product</button></form></div>{% endblock %}'
 FIND = '{% extends \'base.html\' %}{% block body %}<h1>Find order</h1>\n<form class="row" method="get"><input name="q" value="{{ q }}" placeholder="Order ID (ORD… / WAL…), transaction ID or user ID" autofocus><button style="margin:0">Find user</button></form><br>\n{% if q and not hits %}<div class="card">Nothing found for <b>{{ q }}</b>.</div>{% endif %}\n{% for h in hits %}<div class="card"><h3>{{ h.kind }}</h3>\n<p><b>Order ID:</b> {{ h.ref }}</p>\n{% for k, v in h.info %}<p class="mu">{{ k }}: <b>{{ v }}</b></p>{% endfor %}\n<p><b>User:</b> {{ h.uname or \'-\' }} · <b>ID:</b> {{ h.uid }} · <b>Username:</b> {{ (\'@\' + h.username) if h.username else \'-\' }}<br><b>Phone:</b> {{ h.phone or \'-\' }} · <b>Wallet:</b> ₹{{ \'%.2f\'|format(h.balance) }}</p>\n<a class="lk" href="/users?q={{ h.uid }}">Open user</a></div>{% endfor %}{% endblock %}'
 PANEL = '{% extends \'base.html\' %}{% block body %}<h1>Panel API</h1>\n<div class="card"><h3>1. Connect to your panel</h3>\n<p class="mu">Paste the API token of your main website and press <b>Save &amp; Connect</b>. You can change the token or the server URL any time.</p>\n<form method="post" action="/panel/connect"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Server URL</label><input name="panel_url" value="{{ gs(\'panel_url\') or default_url }}">\n<label>API token</label><input name="panel_token" value="{{ gs(\'panel_token\') }}" autocomplete="off" placeholder="paste API token">\n<button>Save &amp; Connect</button> <button type="submit" formaction="/panel/balance">Check Balance</button>\n<a class="lk" href="/panel/products"><button type="button">Show Products</button></a></form>\n<p class="mu">Status: <b class="{{ \'ok\' if gs(\'panel_connected\')==\'1\' else \'no\' }}">{{ \'Connected\' if gs(\'panel_connected\')==\'1\' else (\'Token saved - press Save & Connect\' if gs(\'panel_token\') else \'Not connected\') }}</b></p></div>\n<div class="card"><h3>2. Your prices (percentage on the panel price)</h3>\n<p class="mu">Every product you add gets its prices automatically: <b>panel price + your %</b>. Change the % and press <b>Save &amp; apply</b> - all products are updated at once, no need to edit each price.</p>\n<form method="post" action="/panel/markup"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Reseller % (reseller price = panel price + this %)</label><input name="mk_reseller" value="{{ rp }}">\n<label>User % (user price = panel price + this %)</label><input name="mk_user" value="{{ up }}">\n<p class="mu">Example: panel price ₹100 &rarr; reseller <b>₹{{ \'%.2f\'|format(ex_r) }}</b> &middot; user <b>₹{{ \'%.2f\'|format(ex_u) }}</b></p>\n<button name="a" value="save">Save %</button>\n<button name="a" value="apply" class="red" onclick="return confirm(\'Recalculate the price of ALL panel products with these percentages? Prices you edited by hand are overwritten too.\')">Save &amp; apply to ALL products</button></form></div>\n<div class="card"><h3>3. Your panel products</h3>\n<p class="mu">In the shop: <b>{{ np }}</b> panel product(s), <b>{{ nl }}</b> plan(s). Press <b>Show Products</b> above to see everything on your panel and add the ones you want (or all).</p>\n<form method="post" action="/panel/auto"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<label>Auto price sync (keeps panel prices up to date, then applies your %)</label>\n<select name="panel_autosync"><option value="1" {{ \'selected\' if gs(\'panel_autosync\')!=\'0\' }}>ON</option><option value="0" {{ \'selected\' if gs(\'panel_autosync\')==\'0\' }}>OFF</option></select>\n<label>Sync every (minutes, 5 - 1440)</label><input name="panel_sync_min" value="{{ gs(\'panel_sync_min\') }}">\n<button>Save</button> <button type="submit" formaction="/panel/sync">Sync prices now</button></form>\n<p class="mu">Last sync: {{ (gs(\'panel_last_sync\')|int)|ts if gs(\'panel_last_sync\')|int else \'never\' }}</p></div>{% endblock %}'
 PANELPROD = '{% extends \'base.html\' %}{% block body %}<h1>Panel products</h1>\n<p class="mu"><a class="lk" href="/panel">&larr; back to Panel API</a> &middot; Percentages now: reseller <b>+{{ rp }}%</b>, user <b>+{{ up }}%</b></p>\n<form method="post" action="/panel/add"><input type="hidden" name="csrf" value="{{ csrf() }}">\n<div class="card"><button name="a" value="selected" style="margin:0">Add selected</button> <button name="a" value="all" class="red" style="margin:0" onclick="return confirm(\'Add ALL {{ rows|length }} products?\')">Add ALL products</button>\n<label style="margin-top:12px"><input type="checkbox" style="width:auto" onclick="document.querySelectorAll(\'.pc\').forEach(function(x){x.checked=this.checked}.bind(this))"> Select all</label></div>\n{% for r in rows %}<div class="card"><label style="margin:0;color:var(--tx);font-size:15px"><input class="pc" type="checkbox" name="pid" value="{{ r.id }}" style="width:auto"> <b>{{ r.name }}</b> <span class="mu">(panel #{{ r.id }})</span> {% if r.added %}<span class="bd ok">Added</span>{% endif %}</label>\n<div class="tw"><table><tr><th>Plan</th><th>Panel price</th><th>Reseller price</th><th>User price</th></tr>\n{% for pl in r.plans %}<tr><td>{{ pl.name }}</td><td>₹{{ \'%.2f\'|format(pl.base) }}</td><td>₹{{ \'%.2f\'|format(pl.res) }}</td><td>₹{{ \'%.2f\'|format(pl.usr) }}</td></tr>{% endfor %}</table></div></div>{% endfor %}\n{% if not rows %}<div class="card">No products found on the panel.</div>{% endif %}</form>{% endblock %}'
@@ -244,7 +279,7 @@ BOTCFG = """{% extends 'base.html' %}{% block body %}<h1>Bot Token &amp; Admin</
 <label style="display:block;margin:8px 0"><input type="checkbox" name="tg" value="1" style="width:auto"> Also change the Telegram profile name of the bot</label>
 <button>Save name</button></form></div>{% endblock %}"""
 
-app.jinja_loader = DictLoader({"botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
+app.jinja_loader = DictLoader({"categories.html": CATS, "botcfg.html": BOTCFG, "panel.html": PANEL, "panelprod.html": PANELPROD, "find.html": FIND, "newproduct.html": NEWPRODUCT, "payments.html": PAYMENTS, "coupons.html": COUPONS, "backup.html": BACKUP, "broadcast.html": BROADCAST,"products.html": PRODUCTS, "product.html": PRODUCT, "plan.html": PLAN, "deposits.html": DEPOSITS, "orders.html": ORDERS,"base.html": BASE, "login.html": LOGIN, "home.html": HOME, "emojis.html": EMOJIS, "settings.html": SETTINGS, "users.html": USERS})
 
 
 def csrf():
@@ -258,7 +293,7 @@ def public_url():
     return (bot.PUBLIC_URL or request.host_url.rstrip("/"))
 
 
-app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), gw_on=gateway.configured,
+app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), cats=lambda: db.cats(False), gw_on=gateway.configured,
                              webhook_url=lambda: public_url() + "/webhook/gateway")
 app.jinja_env.filters["ts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %H:%M")
 
@@ -471,6 +506,10 @@ def settings():
                     db.put("gw_connected", "0")
                 if k == "gw_gateway" and v not in ("paytm", "fampay"):
                     continue
+                if k == "btn_color" and v not in ("auto", "blue", "green", "red", "plain"):
+                    continue
+                if k == "deep_bold" and v not in ("0", "1"):
+                    continue
                 if k == "gw_base":
                     v = v.rstrip("/")
                     if v and not v.startswith("http"):
@@ -513,12 +552,22 @@ def user_action(uid):
             try:
                 amt = float(request.form.get("amt", "0"))
                 c.execute("UPDATE users SET balance=balance+? WHERE id=?", (amt, uid))
+                if amt > 0 and request.form.get("hold") == "1":
+                    c.execute("UPDATE users SET refund_hold=ROUND(COALESCE(refund_hold,0)+?,2) WHERE id=?", (amt, uid))
             except ValueError:
                 flash("Invalid amount")
+        elif a in ("rok", "rno"):
+            pass                        # handled below (needs its own connection)
         elif a == "role":
             c.execute("UPDATE users SET role=CASE role WHEN 'reseller' THEN 'user' ELSE 'reseller' END WHERE id=?", (uid,))
         elif a == "ban":
             c.execute("UPDATE users SET banned=1-banned WHERE id=?", (uid,))
+    if a in ("rok", "rno"):
+        ok = a == "rok"
+        amt = db.hold_decide(uid, ok)
+        if amt > 0:
+            bot.safe(bot.refund_user_msg, uid, ok, amt, 0)
+        flash(("Refund approved: " if ok else "Refund deducted: ") + f"{amt:.2f}")
     return redirect(request.referrer or "/users")
 
 
@@ -558,6 +607,58 @@ def parse_plan_rows(f):
     return out
 
 
+def cat_of(f):
+    """category id from a form (0 = none / unknown id)"""
+    try:
+        cid = int(f.get("cat_id") or 0)
+    except ValueError:
+        return 0
+    return cid if cid and db.cat(cid) else 0
+
+
+def eid_ok(v):
+    v = (v or "").strip()
+    return v if v.isdigit() else ""
+
+
+@app.route("/categories", methods=["GET", "POST"])
+def categories():
+    if request.method == "POST":
+        f, a = request.form, request.form.get("a")
+        with db.conn() as c:
+            if a == "add" and f.get("name", "").strip():
+                if f.get("eid", "").strip() and not eid_ok(f.get("eid")):
+                    flash("Premium emoji ID must be digits only - category added without it.")
+                c.execute("INSERT INTO categories(name,emoji,eid,sort) VALUES(?,?,?,?)",
+                          (f["name"].strip(), f.get("emoji", "").strip(), eid_ok(f.get("eid")), int(num(f.get("sort")))))
+                flash("Category added")
+            elif a == "save" and f.get("cid", "").isdigit():
+                if f.get("eid", "").strip() and not eid_ok(f.get("eid")):
+                    flash("Premium emoji ID must be digits only - ID not saved.")
+                c.execute("UPDATE categories SET name=?, emoji=?, eid=?, sort=?, active=? WHERE id=?",
+                          (f.get("name", "").strip() or "Category", f.get("emoji", "").strip(), eid_ok(f.get("eid")),
+                           int(num(f.get("sort"))), 1 if f.get("active") == "1" else 0, int(f["cid"])))
+                flash("Saved")
+            elif a == "del" and f.get("cid", "").isdigit():
+                c.execute("UPDATE products SET cat_id=0 WHERE cat_id=?", (int(f["cid"]),))
+                c.execute("DELETE FROM categories WHERE id=?", (int(f["cid"]),))
+                flash("Category deleted (its products are now under the other button)")
+            elif a == "text":
+                for k in ("cat_title", "cat_text", "cat_other_name"):
+                    if k in f:
+                        db.put(k, f[k].strip())
+                flash("Saved")
+        db.emoji_clear()
+        return redirect("/categories")
+    return page("categories", rows=db.cats(False), tab="categories")
+
+
+@app.route("/categories/preview", methods=["POST"])
+def categories_preview():
+    flash("Sent to your Telegram - check the bot chat." if bot.send_cat_preview() else "ADMIN_ID is not set.")
+    return redirect("/categories")
+
+
 @app.route("/products/new", methods=["GET", "POST"])
 def product_new():
     if request.method == "POST":
@@ -569,7 +670,7 @@ def product_new():
             return redirect("/products/new")
         with db.conn() as c:
             eid = f.get("emoji_id", "").strip()
-            cur = c.execute("INSERT INTO products(name,link,emoji_id) VALUES(?,?,?)", (name, f.get("link", "").strip(), eid if eid.isdigit() else ""))
+            cur = c.execute("INSERT INTO products(name,link,emoji_id,cat_id) VALUES(?,?,?,?)", (name, f.get("link", "").strip(), eid if eid.isdigit() else "", cat_of(f)))
             pid = cur.lastrowid
             for n, (pn, pr, rp) in enumerate(plans):
                 c.execute("INSERT INTO plans(product_id,name,price,rprice,sort) VALUES(?,?,?,?,?)", (pid, pn, pr, rp, n))
@@ -601,9 +702,13 @@ def product_page(pid):
                 if eid and not eid.isdigit():
                     eid = p["emoji_id"] or ""
                     flash("Emoji ID must be digits only - emoji not changed")
-                c.execute("UPDATE products SET name=?, descr=?, link=?, active=?, sort=?, emoji_id=? WHERE id=?",
-                          (f.get("name", "").strip() or p["name"], f.get("descr", "").strip(), f.get("link", "").strip(), 1 if f.get("active") == "1" else 0, int(num(f.get("sort"))), eid, pid))
+                c.execute("UPDATE products SET name=?, descr=?, link=?, active=?, sort=?, emoji_id=?, cat_id=? WHERE id=?",
+                          (f.get("name", "").strip() or p["name"], f.get("descr", "").strip(), f.get("link", "").strip(), 1 if f.get("active") == "1" else 0, int(num(f.get("sort"))), eid, cat_of(f), pid))
                 flash("Saved")
+            elif a == "setcat":
+                c.execute("UPDATE products SET cat_id=? WHERE id=?", (cat_of(f), pid))
+                flash("Category saved")
+                return redirect("/products")
             elif a == "del":
                 c.execute("DELETE FROM keys WHERE used=0 AND plan_id IN (SELECT id FROM plans WHERE product_id=?)", (pid,))
                 c.execute("DELETE FROM plans WHERE product_id=?", (pid,))

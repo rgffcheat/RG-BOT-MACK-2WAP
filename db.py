@@ -187,6 +187,12 @@ SETTINGS_DEFAULTS = {
     "panel_sync_min": "60",
     "panel_last_sync": "0",
     "shop_bullets": "🛡 Premium Keys\n🔥 Instant Delivery\n🚫 Secure Payment\n💎 24/7 Support",
+    # ---- V12 ----
+    "btn_color": "auto",            # auto = as designed | blue | green | red | plain (all buttons one colour)
+    "deep_bold": "1",               # 1 = shop name / titles in extra-heavy bold
+    "cat_title": "",                # empty = the shop name
+    "cat_text": "🚀 Premium Products for Your Device\n🔥 Find Your Perfect Product!\n🎮 Choose Your Device Category",
+    "cat_other_name": "OTHER PRODUCTS",
 }
 RATES = {"INR": 1, "BDT": 1.4, "PKR": 3.3, "NPR": 1.6, "LKR": 3.6, "AED": 0.044, "USD": 0.012, "GBP": 0.0095}
 for _c, _r in RATES.items():
@@ -250,6 +256,12 @@ def init():
             code TEXT PRIMARY KEY, kind TEXT DEFAULT 'percent', value REAL DEFAULT 0, max_uses INTEGER DEFAULT 0,
             used INTEGER DEFAULT 0, expires INTEGER DEFAULT 0, active INTEGER DEFAULT 1, created INTEGER);
         CREATE TABLE IF NOT EXISTS coupon_uses(code TEXT, user_id INTEGER, created INTEGER);
+        CREATE TABLE IF NOT EXISTS categories(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, emoji TEXT DEFAULT '', eid TEXT DEFAULT '',
+            sort INTEGER DEFAULT 0, active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS refund_reqs(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, plan_id INTEGER, price REAL DEFAULT 0, hold REAL DEFAULT 0,
+            status TEXT DEFAULT 'pending', created INTEGER, decided INTEGER DEFAULT 0);
         CREATE INDEX IF NOT EXISTS ix_pay_status ON pay_orders(status, created);
         CREATE INDEX IF NOT EXISTS ix_keys_plan ON keys(plan_id, used);
         CREATE INDEX IF NOT EXISTS ix_orders_user ON orders(user_id);
@@ -260,6 +272,8 @@ def init():
                     "ALTER TABLE pay_orders ADD COLUMN method TEXT DEFAULT 'qr'",
                     "ALTER TABLE pay_orders ADD COLUMN proof TEXT DEFAULT ''",
                     "ALTER TABLE products ADD COLUMN api_pid INTEGER DEFAULT 0",
+                    "ALTER TABLE products ADD COLUMN cat_id INTEGER DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN refund_hold REAL DEFAULT 0",
                     "ALTER TABLE plans ADD COLUMN api_plan_id INTEGER DEFAULT 0",
                     "ALTER TABLE plans ADD COLUMN base_price REAL DEFAULT 0",
                     "ALTER TABLE plans ADD COLUMN manual INTEGER DEFAULT 0",
@@ -287,6 +301,20 @@ def get(k, default=""):
 def put(k, v):
     with conn() as c:
         c.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
+    _gc.clear()
+
+
+_gc = {}
+
+
+def get_c(k, default="", ttl=4):
+    """settings value with a tiny cache (used for things read on every button)"""
+    hit = _gc.get(k)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    v = get(k, default)
+    _gc[k] = (time.time(), v)
+    return v
 
 
 # ---------- emojis ----------
@@ -315,6 +343,21 @@ def emoji_direct(eid, fb=""):
     """premium emoji by a raw ID (product / plan emoji). Returns (fallback, id) - id is empty when Telegram blocks premium emoji."""
     emoji("top")
     return fb, ("" if _ec.get("blocked") else (eid or ""))
+
+
+def emoji_map():
+    """{normal emoji (without variation selector): premium ID}. Built from the slots that have a premium ID
+    (main.py PREMIUM_EMOJI). Used so a normal emoji typed in admin text / category names turns premium by itself."""
+    emoji("top")
+    if _ec.get("blocked"):
+        return {}
+    m = {}
+    for k, (fb, _n) in EMOJI_DEFAULTS.items():
+        e = _ec["d"].get(k)
+        if e and e[1]:
+            m.setdefault(e[0].replace("\ufe0f", ""), e[1])
+            m.setdefault(fb.replace("\ufe0f", ""), e[1])
+    return m
 
 
 def product_eid(p):
@@ -500,15 +543,34 @@ def price_for(u, pl):
     return round(base * rate(u["currency"]), 2)
 
 
-def products(active_only=True):
+def products(active_only=True, cat_id=None):
     q = """SELECT p.*,
       (SELECT COUNT(*) FROM keys k JOIN plans pl ON pl.id=k.plan_id WHERE pl.product_id=p.id AND k.used=0)
         + (SELECT COUNT(*) * 999999 FROM plans pl WHERE pl.product_id=p.id AND pl.active=1 AND pl.api_plan_id>0) stock,
       (SELECT COUNT(*) FROM plans pl WHERE pl.product_id=p.id) nplans FROM products p"""
+    where = []
     if active_only:
-        q += " WHERE p.active=1"
+        where.append("p.active=1")
+    if cat_id is not None:
+        # 0 = products without a (still existing) category
+        where.append("(p.cat_id=0 OR p.cat_id NOT IN (SELECT id FROM categories))" if not cat_id else f"p.cat_id={int(cat_id)}")
+    if where:
+        q += " WHERE " + " AND ".join(where)
     with conn() as c:
         return c.execute(q + " ORDER BY p.sort, p.id").fetchall()
+
+
+def cats(active_only=True):
+    q = "SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.cat_id=c.id) nprod FROM categories c"
+    if active_only:
+        q += " WHERE c.active=1"
+    with conn() as c:
+        return c.execute(q + " ORDER BY c.sort, c.id").fetchall()
+
+
+def cat(cid):
+    with conn() as c:
+        return c.execute("SELECT * FROM categories WHERE id=?", (cid,)).fetchone()
 
 
 def product(pid):
@@ -606,7 +668,7 @@ def buy(uid, plan_id, coupon="", ext_price=None):
                           WHERE pl.id=? AND pl.active=1 AND p.active=1""", (plan_id,)).fetchone()
         if not u or not pl:
             if ext_price and u:
-                c.execute("UPDATE users SET balance=ROUND(balance+?,2) WHERE id=?", (ext_price, uid))
+                c.execute("UPDATE users SET balance=ROUND(balance+?,2), refund_hold=ROUND(COALESCE(refund_hold,0)+?,2) WHERE id=?", (ext_price, ext_price, uid))
                 return ("refund", ext_price)
             return ("gone",)
         price = price_for(u, pl)
@@ -622,7 +684,7 @@ def buy(uid, plan_id, coupon="", ext_price=None):
         k = c.execute("SELECT id, code FROM keys WHERE plan_id=? AND used=0 ORDER BY id LIMIT 1", (plan_id,)).fetchone()
         if not k:
             if ext_price is not None:
-                c.execute("UPDATE users SET balance=ROUND(balance+?,2) WHERE id=?", (ext_price, uid))
+                c.execute("UPDATE users SET balance=ROUND(balance+?,2), refund_hold=ROUND(COALESCE(refund_hold,0)+?,2) WHERE id=?", (ext_price, ext_price, uid))
                 return ("refund", ext_price)
             return ("stock",)
         no = new_order_no()
@@ -652,7 +714,7 @@ def api_reserve(uid, plan_id, coupon="", ext_price=None):
                           WHERE pl.id=? AND pl.active=1 AND p.active=1 AND pl.api_plan_id>0""", (plan_id,)).fetchone()
         if not u or not pl:
             if ext_price and u:
-                c.execute("UPDATE users SET balance=ROUND(balance+?,2) WHERE id=?", (ext_price, uid))
+                c.execute("UPDATE users SET balance=ROUND(balance+?,2), refund_hold=ROUND(COALESCE(refund_hold,0)+?,2) WHERE id=?", (ext_price, ext_price, uid))
                 return ("refund", ext_price)
             return ("gone",)
         price = price_for(u, pl)
@@ -772,6 +834,70 @@ def pay_reject(no):
 def add_balance(uid, amt):
     with conn() as c:
         c.execute("UPDATE users SET balance=ROUND(balance+?,2) WHERE id=?", (amt, uid))
+
+
+# ---------- V13: refund hold (refunded money needs admin approval before it can be spent) ----------
+def hold_of(u):
+    """part of the wallet that is a refund waiting for admin approval"""
+    try:
+        return round(max(0.0, min(float(u["refund_hold"] or 0), float(u["balance"] or 0))), 2)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0.0
+
+
+def add_refund(uid, amt):
+    """money back after a failed order that was paid by QR / UPI / Binance: wallet + refund hold"""
+    with conn() as c:
+        c.execute("UPDATE users SET balance=ROUND(balance+?,2), refund_hold=ROUND(COALESCE(refund_hold,0)+?,2) WHERE id=?", (amt, amt, uid))
+
+
+def rq_create(uid, plan_id, price, hold):
+    """new approval request. None if this user already has one waiting."""
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        if c.execute("SELECT 1 FROM refund_reqs WHERE user_id=? AND status='pending'", (uid,)).fetchone():
+            return None
+        return c.execute("INSERT INTO refund_reqs(user_id,plan_id,price,hold,created) VALUES(?,?,?,?,?)",
+                         (uid, plan_id, price, hold, int(time.time()))).lastrowid
+
+
+def rq_get(rid):
+    with conn() as c:
+        return c.execute("SELECT * FROM refund_reqs WHERE id=?", (rid,)).fetchone()
+
+
+def _hold_apply(c, uid, ok):
+    u = c.execute("SELECT balance, refund_hold FROM users WHERE id=?", (uid,)).fetchone()
+    if not u:
+        return 0.0
+    hold = round(max(0.0, min(float(u["refund_hold"] or 0), float(u["balance"] or 0))), 2)
+    if ok:      # approved: the refunded money becomes normal wallet money
+        c.execute("UPDATE users SET refund_hold=0 WHERE id=?", (uid,))
+    else:       # rejected: ALL refunded money is taken back
+        c.execute("UPDATE users SET balance=ROUND(balance-?,2), refund_hold=0 WHERE id=?", (hold, uid))
+    return hold
+
+
+def rq_decide(rid, ok):
+    """Approve / Reject one request. Runs once. Returns (request row, amount) or None if already decided."""
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        r = c.execute("SELECT * FROM refund_reqs WHERE id=?", (rid,)).fetchone()
+        if not r or r["status"] != "pending":
+            return None
+        hold = _hold_apply(c, r["user_id"], ok)
+        c.execute("UPDATE refund_reqs SET status=?, decided=?, hold=? WHERE id=?", ("approved" if ok else "rejected", int(time.time()), hold, rid))
+        return r, hold
+
+
+def hold_decide(uid, ok):
+    """same, from the website Users page (no request needed). Returns the amount."""
+    with conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        hold = _hold_apply(c, uid, ok)
+        c.execute("UPDATE refund_reqs SET status=?, decided=? WHERE user_id=? AND status='pending'",
+                  ("approved" if ok else "rejected", int(time.time()), uid))
+        return hold
 
 
 def dep_record_paid(uid, amt, txn):

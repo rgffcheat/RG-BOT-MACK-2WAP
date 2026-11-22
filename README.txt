@@ -111,3 +111,33 @@ Products you added the old way (keys pasted by hand) keep working exactly as bef
 2) Website -> "Bot Token" tab: change BOT TOKEN (bot restarts on it instantly), ADMIN ID, and BOT NAME (optionally the Telegram profile name too).
    The token is saved in the database; it wins over the BOT_TOKEN env variable. The old hard-coded token was REMOVED from the code:
    set BOT_TOKEN env once OR paste the token on the website after the first deploy.
+
+================ V12 ================
+Files changed: db.py, bot.py, web.py (main.py untouched - your PREMIUM_EMOJI IDs stay there). Replace ALL files and redeploy. Old data is kept.
+1) DEEP BOLD TITLES: shop name in the main menu, shop screen and category screen is now drawn in extra-thick letters
+   (Settings -> "Look & feel" -> Deep bold titles ON/OFF).
+2) PREMIUM EMOJI in the shop-screen lines (Premium Keys / Instant Delivery ...): a normal emoji typed in the line turns premium by itself
+   when that emoji has an ID in main.py PREMIUM_EMOJI (key, fire, shield, ban, diamond, gift ...).
+   Or write  🔥{premium ID}  in any line to use any premium emoji. Same rule works in the category-screen lines and category buttons.
+3) CATEGORIES (Website -> Categories): Shop Now first shows the category buttons (NON ROOT PANEL, ROOT PANEL, IPHONE PANEL, PC PANEL, FF GUILD GLORY ...),
+   the customer taps one and sees only that category's products. Add / rename / hide / delete / sort any number of categories,
+   each with its own normal emoji + premium emoji ID. Category screen title and lines are editable there.
+   Assign a product: Products list (drop-down), product page, or Add product form. Products without a category appear under
+   one extra button (name editable). No categories at all = Shop Now shows all products as before.
+   BACK from a product goes back to its category; BACK from a category goes to the category list.
+4) BUTTON COLOUR (Settings -> Look & feel): Auto | all Blue | all Green | all Red | all White (normal).
+5) Categories page has "Send category screen + shop to my Telegram" to preview.
+
+================ V13 - REFUND SYSTEM ================
+Files changed: db.py, bot.py, web.py (main.py unchanged). Replace ALL files and redeploy. Old data is kept.
+1) WALLET purchase fails (server issue / out of stock / panel balance): nothing is charged, user gets "ORDER FAILED - NOTHING CHARGED" (reason: Server issue or Out of stock).
+2) QR / UPI / Binance payment, but the key could not be delivered: the FULL paid amount goes back to the user's wallet as a REFUND HOLD
+   and the user gets "ORDER FAILED - REFUND ISSUED" (reason, refunded amount, wallet balance, order ref).
+3) The refund hold cannot be spent without your approval. Free wallet money (added earlier) can still be used normally.
+   When a purchase needs refunded money, you get "REFUND BALANCE - APPROVAL NEEDED" (user, product, price, wallet, locked refund, free money) with Approve / Reject:
+   - Approve -> the hold is released, the user is told and gets a "Continue to checkout" button.
+   - Reject  -> ALL refunded money is taken back from the wallet, the user is told.
+   One request per user at a time. My Profile shows "Refund (needs approval)".
+4) Website -> Users: shows "Refund hold", buttons [Approve refund] / [Deduct refund], and a "refund hold" tick box next to the Balance button:
+   tick it when YOU add money by hand as a refund (e.g. panel crashed, you checked, no key was made) - the user must then be approved before spending it.
+5) Panel did not answer / crashed (unknown if a key was made): still NO automatic refund (as in V10) - you get the alert and decide.
