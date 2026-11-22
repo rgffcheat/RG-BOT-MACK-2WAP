@@ -221,3 +221,16 @@ Website -> Users -> open a user/reseller profile (or search by Chat ID) -> botto
 Every product and plan is listed with its normal price. Type a custom price (in Rs) for the plans you want, leave others empty, press "Save all prices" once.
 That user then sees and pays the custom price in the bot (plan list, buy button, wallet, QR/UPI - everywhere). Other users are not affected.
 Empty box = normal price again. "Reset all to normal" removes every custom price of that user. Custom prices are part of the database backup.
+
+
+=====================================================================
+V19 - PRODUCT DIRECT LINKS
+=====================================================================
+* Every product has its own link:  https://t.me/<YourBotUsername>?start=p_<product id>
+* Made automatically for NEW products and for ALL OLD products (no database change, nothing to run).
+* Tapping the link opens the bot and shows that product (plans + Buy buttons) directly.
+  If the user is not phone-verified yet, the product opens right after verification.
+  Hidden / deleted product -> the normal main menu opens.
+* Website -> Products: "Link" column with a Copy button for each product, and "Copy ALL links"
+  (copies "Name - link" for every product shown). Open a product to see its link on top.
+* The link needs the bot username: it is loaded automatically when the bot starts (Bot Token saved).

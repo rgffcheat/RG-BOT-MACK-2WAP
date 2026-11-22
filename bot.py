@@ -359,6 +359,28 @@ def _msg_id(r):
         return None
 
 
+# ---------------------------------------------------------------- V19: product deep links
+DEEP = {}      # user id -> product id waiting for phone verification (link opened by a not-yet-verified user)
+
+
+def product_link(pid):
+    """every product has its own link: https://t.me/<bot>?start=p_<product id>  (made automatically, old + new products)"""
+    un = (BOT_USERNAME.get("v") or "").lstrip("@")
+    return f"https://t.me/{un}?start=p_{int(pid)}" if un else ""
+
+
+def open_product(chat, u, pid, start_mid=None):
+    """product link tapped -> that product's screen opens directly (no searching in the shop)"""
+    p = db.product(pid)
+    if not p or not p["active"]:
+        start_flow(chat, u, start_mid)               # product deleted / hidden -> normal main menu
+        return
+    t, k = prod_screen(u, pid)
+    r = send(chat, t, k)
+    if start_mid and _msg_id(r):
+        api("deleteMessage", chat_id=chat, message_id=start_mid)
+
+
 def start_flow(chat, u, start_mid=None):
     """/start: a small 'Welcome' appears first, the main menu follows at once,
     and as soon as the menu is on screen the Welcome message AND the user's own /start message are deleted."""
@@ -1923,9 +1945,15 @@ def on_message(m):
             threading.Thread(target=safe, args=(secure.sync_commands, uid), daemon=True).start()
         parts = text.split(maxsplit=1)
         ref = None
+        deep_pid = None
         if len(parts) > 1 and parts[1].startswith("ref_"):
             try:
                 ref = int(parts[1][4:])
+            except ValueError:
+                pass
+        elif len(parts) > 1 and parts[1].startswith("p_"):         # V19: product link
+            try:
+                deep_pid = int(parts[1][2:])
             except ValueError:
                 pass
         u0 = db.ensure_user(fr, ref)
@@ -1935,8 +1963,13 @@ def on_message(m):
         if u["verified"] and not u0["verified"]:        # phone check is OFF -> the user counts as verified now
             safe(notify_new_user, u)
         if u["verified"]:
-            start_flow(chat, u, m.get("message_id"))
+            if deep_pid:
+                open_product(chat, u, deep_pid, m.get("message_id"))
+            else:
+                start_flow(chat, u, m.get("message_id"))
         else:
+            if deep_pid:
+                DEEP[uid] = deep_pid                  # open it right after the phone is verified
             ask_phone(chat)
         return
 
@@ -1959,7 +1992,11 @@ def on_message(m):
                 send(refby, f"🎁 Your friend joined and verified! You earned <b>{ru['symbol']}{reward:g}</b> referral balance.")
         api("sendMessage", chat_id=chat, text="✅ <b>Phone verified!</b>", parse_mode="HTML",
             reply_markup=json.dumps({"remove_keyboard": True}))
-        send_menu(chat, db.user(uid))
+        dp = DEEP.pop(uid, None)
+        if dp:
+            open_product(chat, db.user(uid), dp)
+        else:
+            send_menu(chat, db.user(uid))
         return
 
     u = db.autoverify(db.user(uid))

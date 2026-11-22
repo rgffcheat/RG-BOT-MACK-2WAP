@@ -289,12 +289,19 @@ PRODUCTS = """{% extends 'base.html' %}{% block body %}<div class="ph"><h1>Produ
 <select name="cat_id" form="bulk"><option value="">Move selected to category...</option><option value="0">- no category -</option>{% for c in cats() %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
 <button form="bulk" name="a" value="move">Move</button><button form="bulk" name="a" value="show" class="sec">Show</button><button form="bulk" name="a" value="hide" class="sec">Hide</button>
 <button form="bulk" name="a" value="del" class="red" onclick="var n=document.querySelectorAll('.pc:checked').length;if(!n){alert('Tick at least one product first');return false}return confirm('Delete '+n+' selected product(s) with all their plans and unsold keys? This cannot be undone.')">🗑️ Delete selected</button>
+<button type="button" class="grn" onclick="cpAll()">🔗 Copy ALL links</button>
 <button form="bulk" name="a" value="delall" class="red" onclick="var t=prompt('This deletes ALL products (every category) with their plans and unsold keys.\\nType DELETE to confirm:');if(t!=='DELETE'){return false}document.getElementById('dc').value=t;return true">Delete ALL</button></div>
-<div class="card tw"><table id="ptab"><tr><th></th><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Status</th><th></th></tr>
-{% for p in rows %}<tr data-n="{{ p.name|lower }}"><td><input class="pc" type="checkbox" name="pid" value="{{ p.id }}" form="bulk"></td><td><a class="lk" href="/products/{{ p.id }}"><b>{{ p.name }}</b></a></td>
+<div class="card tw"><table id="ptab"><tr><th></th><th>Name</th><th>Category</th><th>Plans</th><th>Stock</th><th>Status</th><th>Link</th><th></th></tr>
+{% for p in rows %}<tr data-n="{{ p.name|lower }}" data-l="{{ plink(p.id) }}"><td><input class="pc" type="checkbox" name="pid" value="{{ p.id }}" form="bulk"></td><td><a class="lk" href="/products/{{ p.id }}"><b>{{ p.name }}</b></a></td>
 <td><form method="post" action="/products/{{ p.id }}" class="row"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="setcat"><select name="cat_id" style="min-width:140px" onchange="this.form.requestSubmit()"><option value="0">- none -</option>{% for c in cats() %}<option value="{{ c.id }}" {{ 'selected' if p.cat_id==c.id }}>{{ c.name }}</option>{% endfor %}</select></form></td>
-<td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td><span class="bd {{ 'ok' if p.active else 'no' }}">{{ 'Visible' if p.active else 'Hidden' }}</span></td><td><a class="lk" href="/products/{{ p.id }}">Open</a></td></tr>{% endfor %}
-{% if not rows %}<tr><td colspan="7" class="mu">No products here.</td></tr>{% endif %}</table></div>
+<td>{{ p.nplans }}</td><td>{{ 'API (auto)' if p.stock >= 999999 else p.stock }}</td><td><span class="bd {{ 'ok' if p.active else 'no' }}">{{ 'Visible' if p.active else 'Hidden' }}</span></td><td><button type="button" class="sec" style="margin:0" onclick="cp('{{ plink(p.id) }}',this)">📋 Copy link</button></td><td><a class="lk" href="/products/{{ p.id }}">Open</a></td></tr>{% endfor %}
+{% if not rows %}<tr><td colspan="8" class="mu">No products here.</td></tr>{% endif %}</table></div>
+<script>function cp(t,b){if(!t){alert('Bot username not loaded yet - start the bot / save the Bot Token first.');return}
+function ok(){var o=b?b.textContent:'';if(b){b.textContent='✅ Copied';setTimeout(function(){b.textContent=o},1500)}else alert('Copied')}
+if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(ok,function(){fb()})}else fb();
+function fb(){var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();try{document.execCommand('copy');ok()}catch(e){prompt('Copy this:',t)}a.remove()}}
+function cpAll(){var L=[];document.querySelectorAll('#ptab tr[data-n]').forEach(function(r){if(r.style.display!=='none'&&r.getAttribute('data-l'))L.push(r.cells[1].innerText.trim()+' - '+r.getAttribute('data-l'))});
+if(!L.length){alert('No links (is the bot running?)');return}cp(L.join('\\n'),null)}</script>
 <script>(function(){var all=document.getElementById('selall'),cnt=document.getElementById('cnt'),q=document.getElementById('q');
 function vis(){return [].filter.call(document.querySelectorAll('#ptab tr[data-n]'),function(r){return r.style.display!=='none'})}
 function upd(){var n=document.querySelectorAll('.pc:checked').length;cnt.textContent=n+' selected'}
@@ -327,6 +334,9 @@ document.querySelectorAll('.pc').forEach(function(c){c.onchange=upd});
 q.oninput=function(){var s=q.value.toLowerCase().trim();document.querySelectorAll('.pick').forEach(function(r){r.style.display=r.getAttribute('data-n').indexOf(s)>=0?'':'none'})};upd();})();</script>{% endblock %}"""
 
 PRODUCT = """{% extends 'base.html' %}{% block body %}<h1>{{ p.name }}</h1>
+<div class="card"><h3>🔗 Direct link of this product</h3><p class="mu">Share this link anywhere. When a customer taps it, the bot opens and shows THIS product directly (no searching).</p>
+{% if plink(p.id) %}<input readonly value="{{ plink(p.id) }}" onclick="this.select()"><button type="button" onclick="var i=this.previousElementSibling;i.select();try{navigator.clipboard.writeText(i.value)}catch(e){document.execCommand('copy')}this.textContent='✅ Copied'">📋 Copy link</button>
+{% else %}<p class="no">Bot username not loaded yet - save the Bot Token / start the bot, then refresh.</p>{% endif %}</div>
 <div class="card"><h3>Product</h3>{% if p.api_pid %}<p class="mu">Connected to panel product <b>#{{ p.api_pid }}</b> - keys are bought from the panel automatically. Prices follow the Panel API percentages unless you edit a price by hand.</p>{% endif %}<form method="post"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="a" value="edit">
 <label>Name</label><input name="name" value="{{ p.name }}"><label>Description</label><input name="descr" value="{{ p.descr }}">
 <label>Update group link (Join Telegram button after purchase)</label><input name="link" value="{{ p.link or '' }}" placeholder="https://t.me/yourgroup">
@@ -516,7 +526,7 @@ def public_url():
     return (bot.PUBLIC_URL or request.host_url.rstrip("/"))
 
 
-app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), cats=lambda: db.cats(False), gw_on=gateway.configured,
+app.jinja_env.globals.update(csrf=csrf, gs=lambda k: db.get(k), plink=bot.product_link, cats=lambda: db.cats(False), gw_on=gateway.configured,
                              webhook_url=lambda: public_url() + "/webhook/gateway")
 app.jinja_env.filters["dts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %Y %H:%M") if t else "-"
 app.jinja_env.filters["ts"] = lambda t: datetime.fromtimestamp(t or 0, IST).strftime("%d %b %H:%M")
